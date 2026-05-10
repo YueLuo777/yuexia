@@ -51,6 +51,32 @@ export default function ButtonTestPage() {
 
         {/* 单独展示 */}
         <div>
+          {/* 网站常用 */}
+        <div>
+          <h3 className="text-sm font-semibold text-gray-700 mb-3">网站常用</h3>
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            {[1, 10, 11].map((id) => {
+              const c = colorPresets.find(x => x.id === id);
+              if (!c) return null;
+              return (
+                <button
+                  key={c.id}
+                  onClick={() => toggle(c.id)}
+                  className={`${btnBase} ${c.bg} ${c.text} ${c.hover} border-2 transition-all ${
+                    picked.includes(c.id) ? 'border-gray-900 scale-105 shadow-lg' : 'border-transparent'
+                  }`}
+                >
+                  <span className="text-[10px] opacity-60 block leading-none">{c.id}</span>
+                  {c.name}
+                  {c.desc && <span className="block text-[10px] opacity-70">{c.desc}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 全部颜色 */}
+        <div>
           <h3 className="text-sm font-semibold text-gray-700 mb-3">全部颜色（共 {colorPresets.length} 种）</h3>
           <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 gap-2">
             {colorPresets.map((c) => (
