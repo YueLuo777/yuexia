@@ -8,7 +8,6 @@ import {
   Sun,
   History,
   Sparkles,
-  Cloud,
   Download,
   Upload,
 } from 'lucide-react';
@@ -177,14 +176,6 @@ export default function Header(props: HeaderProps) {
           >
             <Upload className="w-3.5 h-3.5" />
             导入
-          </button>
-          <button
-            onClick={() => window.dispatchEvent(new CustomEvent('open_cloud_sync'))}
-            title="云同步"
-            className="flex items-center gap-1 px-2 py-1 text-xs text-blue-600 border border-blue-200 rounded-md hover:bg-blue-50 transition-colors"
-          >
-            <Cloud className="w-3.5 h-3.5" />
-            云同步
           </button>
         </div>
 

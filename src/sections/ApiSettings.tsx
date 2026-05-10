@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import {
-  Server, Bot, Eye, EyeOff, Save, Trash2, Activity,
-  CheckCircle, Plus, X,
+  Server, Bot, Eye, EyeOff, Trash2,
+  CheckCircle, Plus, X, Copy, Pencil, Power, PowerOff, Lock, Unlock, Wifi,
 } from 'lucide-react';
 // Layout removed - local app mode
 
@@ -10,6 +10,8 @@ export interface ApiModelConfig {
   id: string;
   name: string;
   enabled: boolean;
+  locked: boolean;
+  connectionStatus: 'untested' | 'testing' | 'connected' | 'failed' | 'disabled';
   apiKey: string;
   baseUrl: string;
   model: string;
@@ -38,46 +40,55 @@ function saveSettings(data: ApiSettingsData) {
   } catch { /* ignore */ }
 }
 
-/* ─── 新增模型弹窗 ─── */
-function AddModelModal({
+/* ─── 新增/编辑模型弹窗 ─── */
+function ModelFormModal({
   isOpen,
+  model,
   onClose,
-  onAdd,
+  onSave,
 }: {
   isOpen: boolean;
+  model: ApiModelConfig | null;
   onClose: () => void;
-  onAdd: (model: ApiModelConfig) => void;
+  onSave: (model: ApiModelConfig) => void;
 }) {
-  const [form, setForm] = useState({
-    name: '',
-    id: '',
-    model: '',
-    baseUrl: '',
-    apiKey: '',
-  });
+  const [form, setForm] = useState({ name: '', id: '', baseUrl: '', apiKey: '' });
+  const [showKey, setShowKey] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      if (model) {
+        setForm({ name: model.name, id: model.id, baseUrl: model.baseUrl, apiKey: model.apiKey });
+      } else {
+        setForm({ name: '', id: '', baseUrl: '', apiKey: '' });
+      }
+    }
+  }, [isOpen, model]);
 
   if (!isOpen) return null;
 
+  const isEdit = model !== null;
   const handleSubmit = () => {
     if (!form.name.trim() || !form.id.trim()) return;
-    onAdd({
+    onSave({
       id: form.id.trim(),
       name: form.name.trim(),
-      enabled: true,
+      enabled: model ? model.enabled : true,
+      locked: model ? model.locked : false,
+      connectionStatus: model ? model.connectionStatus : 'untested',
       apiKey: form.apiKey.trim(),
       baseUrl: form.baseUrl.trim(),
-      model: form.model.trim(),
-      description: '',
+      model: model ? model.model : '',
+      description: model ? model.description : '',
     });
-    setForm({ name: '', id: '', model: '', baseUrl: '', apiKey: '' });
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40" onClick={onClose}>
       <div className="w-[480px] bg-white rounded-xl shadow-2xl p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-6">
-          <h3 className="text-base font-bold text-gray-900">新增模型</h3>
+          <h3 className="text-base font-bold text-gray-900">{isEdit ? '编辑模型' : '新增模型'}</h3>
           <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 transition-colors">
             <X className="w-5 h-5" />
           </button>
@@ -93,154 +104,36 @@ function AddModelModal({
             <input type="text" value={form.id} onChange={(e) => setForm({ ...form, id: e.target.value })} placeholder="例如：deepseek" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/20 placeholder:text-gray-400" />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Base URL</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">接口地址</label>
             <input type="text" value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} placeholder="https://api.example.com/v1" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/20 placeholder:text-gray-400" />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">API Key</label>
-            <input type="text" value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} placeholder="请输入 API Key" className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/20 placeholder:text-gray-400" />
+            <div className="relative">
+              <input type={showKey ? 'text' : 'password'} value={form.apiKey} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} placeholder="请输入 API Key" className="w-full pl-3 pr-10 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-brand focus:ring-1 focus:ring-brand/20 placeholder:text-gray-400" />
+              <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
+                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-3 mt-6">
           <button onClick={onClose} className="px-5 py-2 text-sm text-gray-600 border border-gray-200 rounded-md hover:bg-gray-50 transition-colors">取消</button>
-          <button onClick={handleSubmit} disabled={!form.name.trim() || !form.id.trim()} className="px-5 py-2 text-sm text-white bg-brand rounded-md hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors">确认新增</button>
+          <button onClick={handleSubmit} disabled={!form.name.trim() || !form.id.trim()} className="px-5 py-2 text-sm text-white bg-brand rounded-md hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors">{isEdit ? '保存修改' : '确认新增'}</button>
         </div>
       </div>
     </div>
   );
 }
 
-/* ─── 右侧配置面板 ─── */
-function ConfigPanel({
-  model,
-  onChange,
-  onDelete,
-  onSave,
-}: {
-  model: ApiModelConfig | null;
-  onChange: (updated: ApiModelConfig) => void;
-  onDelete: (id: string) => void;
-  onSave: () => void;
-}) {
-  const [showKey, setShowKey] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
-
-  if (!model) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-gray-400">
-        <Bot className="w-12 h-12 mb-3 text-gray-300" />
-        <p className="text-sm">请在上方选择一个模型进行配置</p>
-      </div>
-    );
-  }
-
-  const handleTest = async () => {
-    setStatus('testing');
-    // 模拟测试：如果有 apiKey 和 baseUrl 就认为成功
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    if (model.apiKey.trim() && model.baseUrl.trim()) {
-      setStatus('success');
-    } else {
-      setStatus('error');
-    }
-  };
-
-  const statusText = status === 'idle' ? '未测试' : status === 'testing' ? '测试中...' : status === 'success' ? '连接成功' : '连接失败';
-  const statusColor = status === 'success' ? 'text-emerald-500' : status === 'error' ? 'text-red-500' : status === 'testing' ? 'text-blue-500' : 'text-gray-400';
-
-  return (
-    <div className="h-full overflow-y-auto">
-      {/* 模型头部信息 */}
-      <div className="mb-5 pb-4 border-b border-gray-100">
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${model.enabled ? 'bg-brand-light text-brand' : 'bg-gray-100 text-gray-400'}`}>
-            <Bot className="w-5 h-5" />
-          </div>
-          <div>
-            <h2 className="text-base font-bold text-gray-900">{model.name}</h2>
-            <div className="flex items-center gap-2 mt-0.5">
-              <span className={`text-xs font-medium ${statusColor}`}>{statusText}</span>
-              <span className="text-xs text-gray-500">{model.enabled ? '已启用' : '已禁用'}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* 配置表单 */}
-      <div className="space-y-4">
-        {/* 模型名称 */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">模型名称</label>
-          <input type="text" value={model.name} onChange={(e) => onChange({ ...model, name: e.target.value })} placeholder="请输入模型名称" className="w-1/3 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand transition-all placeholder:text-gray-400" />
-        </div>
-
-        {/* 模型ID */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">模型ID</label>
-          <input type="text" value={model.id} onChange={(e) => onChange({ ...model, id: e.target.value })} placeholder="例如：deepseek" className="w-1/3 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand transition-all placeholder:text-gray-400" />
-        </div>
-
-        {/* Base URL */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Base URL</label>
-          <input type="text" value={model.baseUrl} onChange={(e) => onChange({ ...model, baseUrl: e.target.value })} placeholder="https://api.example.com/v1" className="w-1/3 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand transition-all placeholder:text-gray-400" />
-        </div>
-
-        {/* API Key */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
-          <div className="relative w-1/3">
-            <input type={showKey ? 'text' : 'password'} value={model.apiKey} onChange={(e) => onChange({ ...model, apiKey: e.target.value })} placeholder="请输入 API Key" className="w-full pl-3 pr-10 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand transition-all placeholder:text-gray-400" />
-            <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
-              {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-          </div>
-        </div>
-
-        {/* 底部操作按钮 */}
-        <div className="flex items-center gap-3 pt-3">
-          <button
-            onClick={() => { if (window.confirm(`确定要删除「${model.name}」吗？`)) { onDelete(model.id); } }}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm text-red-600 border border-red-200 bg-white hover:bg-red-50 rounded-lg transition-colors"
-          >
-            <Trash2 className="w-4 h-4" />
-            删除模型
-          </button>
-          <button
-            onClick={handleTest}
-            disabled={status === 'testing'}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-brand hover:bg-brand-dark rounded-lg transition-colors disabled:opacity-60"
-          >
-            <Activity className="w-4 h-4" />
-            状态测试
-          </button>
-          <button
-            onClick={onSave}
-            className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-brand hover:bg-brand-dark rounded-lg transition-colors"
-          >
-            <Save className="w-4 h-4" />
-            保存设置
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 /* ─── 主页面 ─── */
 export default function ApiSettings() {
   const [settings, setSettings] = useState<ApiSettingsData>(loadSettings);
-  const [activeModelId, setActiveModelId] = useState<string | null>(null);
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingModel, setEditingModel] = useState<ApiModelConfig | null>(null);
   const [toast, setToast] = useState<{ text: string; show: boolean }>({ text: '', show: false });
-
-  // 自动选择第一个模型
-  useEffect(() => {
-    if (settings.models.length > 0 && !activeModelId) {
-      setActiveModelId(settings.models[0].id);
-    }
-  }, [settings.models, activeModelId]);
 
   // 静默自动保存
   useEffect(() => {
@@ -254,8 +147,6 @@ export default function ApiSettings() {
     setToast({ text, show: true });
     setTimeout(() => setToast({ text: '', show: false }), 2000);
   }, []);
-
-  const activeModel = activeModelId ? settings.models.find((m) => m.id === activeModelId) || null : null;
 
   const updateModel = (updated: ApiModelConfig) => {
     setSettings((prev) => ({
@@ -272,25 +163,82 @@ export default function ApiSettings() {
       }
       return { ...prev, models: [...prev.models, model] };
     });
-    setActiveModelId(model.id);
     showToast('模型已添加');
   };
 
+  const testConnection = async (model: ApiModelConfig) => {
+    // Set status to testing
+    setSettings((prev) => ({
+      ...prev,
+      models: prev.models.map((m) => (m.id === model.id ? { ...m, connectionStatus: 'testing' } : m)),
+    }));
+    try {
+      const res = await fetch(`${model.baseUrl}/models`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${model.apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (res.ok) {
+        setSettings((prev) => ({
+          ...prev,
+          models: prev.models.map((m) => (m.id === model.id ? { ...m, connectionStatus: 'connected' } : m)),
+        }));
+        showToast('连接成功');
+      } else {
+        setSettings((prev) => ({
+          ...prev,
+          models: prev.models.map((m) => (m.id === model.id ? { ...m, connectionStatus: 'failed' } : m)),
+        }));
+        showToast('连接失败');
+      }
+    } catch {
+      setSettings((prev) => ({
+        ...prev,
+        models: prev.models.map((m) => (m.id === model.id ? { ...m, connectionStatus: 'failed' } : m)),
+      }));
+      showToast('连接失败');
+    }
+  };
+
+  const toggleLock = (id: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      models: prev.models.map((m) => (m.id === id ? { ...m, locked: !m.locked } : m)),
+    }));
+  };
+
   const deleteModel = (id: string) => {
+    const model = settings.models.find((m) => m.id === id);
+    if (model?.locked) {
+      showToast('已锁定的模型无法删除');
+      return;
+    }
     setSettings((prev) => ({
       ...prev,
       models: prev.models.filter((m) => m.id !== id),
     }));
-    if (activeModelId === id) {
-      const remaining = settings.models.filter((m) => m.id !== id);
-      setActiveModelId(remaining.length > 0 ? remaining[0].id : null);
-    }
     showToast('模型已删除');
   };
 
-  const handleSave = () => {
-    saveSettings(settings);
-    showToast('设置已保存');
+  const handleSaveModel = (model: ApiModelConfig) => {
+    if (editingModel) {
+      updateModel(model);
+      showToast('修改已保存');
+    } else {
+      addModel(model);
+    }
+  };
+
+  const openAddModal = () => {
+    setEditingModel(null);
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (model: ApiModelConfig) => {
+    setEditingModel(model);
+    setIsModalOpen(true);
   };
 
   const enabledCount = settings.models.filter((m) => m.enabled).length;
@@ -306,59 +254,107 @@ export default function ApiSettings() {
             </div>
             <h1 className="text-base font-bold text-gray-900">模型管理</h1>
             <span className="px-2 py-0.5 text-xs text-white bg-orange-500 rounded-md">
-              已启用 {enabledCount} 个模型
-            </span>
+              已启用 {enabledCount} 个模型            </span>
           </div>
         </div>
 
-        {/* 主体：卡片网格 + 配置面板 */}
-        <div className="flex flex-col flex-1 overflow-hidden">
-          {/* 模型卡片网格 */}
-          <div className="shrink-0 px-5 pt-4 pb-2 border-b border-gray-100 bg-white">
-            <div className="flex items-center gap-3 mb-3">
-              <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-brand rounded-md hover:bg-brand-dark transition-colors">
-                <Plus className="w-3.5 h-3.5" />
-                <span>新增模型</span>
-              </button>
-              {settings.models.length === 0 && (
-                <span className="text-xs text-gray-400">暂无模型，请点击新增</span>
-              )}
-            </div>
-            {settings.models.length > 0 && (
-              <div className="grid grid-cols-3 gap-3 pb-1">
-                {settings.models.map((model) => {
-                  const isActive = activeModelId === model.id;
-                  return (
-                    <div
-                      key={model.id}
-                      onClick={() => setActiveModelId(model.id)}
-                      className={`relative flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${isActive ? 'border-brand bg-brand-light/30' : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'}`}
-                    >
-                      <Bot className={`w-4 h-4 shrink-0 ${model.enabled ? 'text-brand' : 'text-gray-400'}`} />
-                      <span className="text-xs font-medium truncate flex-1">{model.name}</span>
-                      {model.enabled && <span className="w-1.5 h-1.5 bg-brand rounded-full shrink-0" />}
-                      <button
-                        onClick={(e) => { e.stopPropagation(); updateModel({ ...model, enabled: !model.enabled }); }}
-                        className={`text-xs px-2 py-0.5 rounded border transition-colors shrink-0 ${model.enabled ? 'text-gray-500 border-gray-300 hover:text-red-500 hover:border-red-300 hover:bg-red-50' : 'text-brand border-brand hover:bg-brand-light'}`}
-                      >
-                        {model.enabled ? '取消启用' : '启用'}
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
+        {/* 模型卡片网格 */}
+        <div className="flex-1 overflow-y-auto px-5 py-4">
+          <div className="flex items-center gap-3 mb-4">
+            <button onClick={openAddModal} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-brand rounded-md hover:bg-brand-dark transition-colors">
+              <Plus className="w-3.5 h-3.5" />
+              <span>新增模型</span>
+            </button>
+            {settings.models.length === 0 && (
+              <span className="text-xs text-gray-400">暂无模型，请点击新增</span>
             )}
           </div>
+          {settings.models.length > 0 && (
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
+              {settings.models.map((model) => (
+                <div
+                  key={model.id}
+                  className="bg-white rounded-lg border border-gray-200 p-4 hover:border-gray-300 transition-colors"
+                >
+                  {/* 卡片头部 */}
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${model.enabled ? 'bg-brand-light text-brand' : 'bg-gray-100 text-gray-400'}`}>
+                      <Bot className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-bold text-gray-900 truncate">{model.name}</div>
+                    </div>
+                    <button
+                      onClick={() => toggleLock(model.id)}
+                      className={`shrink-0 text-xs px-2 py-0.5 rounded border transition-colors ${model.locked ? 'text-amber-600 border-amber-300 bg-amber-50 hover:bg-amber-100' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:bg-gray-50'}`}
+                    >
+                      {model.locked ? '已锁定' : '锁定'}
+                    </button>
+                  </div>
 
-          {/* 配置面板 */}
-          <div className="flex-1 p-5 overflow-y-auto bg-white">
-            <ConfigPanel model={activeModel} onChange={updateModel} onDelete={deleteModel} onSave={handleSave} />
-          </div>
+                  {/* 信息表 */}
+                  <div className="space-y-1.5 mb-3">
+                    <div className="flex items-center gap-1 text-xs text-gray-500">
+                      <span className="shrink-0">模型ID:</span>
+                      <span className="text-gray-700 truncate">{model.id}</span>
+
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-gray-500">
+                      <span className="shrink-0">状态：</span>
+                      {model.enabled ? (
+                        <span className={`text-xs ${model.connectionStatus === 'connected' ? 'text-emerald-600' : model.connectionStatus === 'failed' ? 'text-red-500' : model.connectionStatus === 'testing' ? 'text-amber-500' : 'text-gray-400'}`}>
+                          {model.connectionStatus === 'connected' ? '正常' : model.connectionStatus === 'failed' ? '失败' : model.connectionStatus === 'testing' ? '测试中…' : '未测试'}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">未启用</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 操作按钮 */}
+                  <div className="pt-3 border-t border-gray-100 space-y-1.5">
+                    {/* 第一行 */}
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => openEditModal(model)}
+                        className="flex-1 text-center py-1 text-xs text-brand border border-brand/30 rounded hover:bg-brand-light transition-colors"
+                      >
+                        编辑模型
+                      </button>
+                      <button
+                        onClick={() => testConnection(model)}
+                        disabled={model.connectionStatus === 'testing'}
+                        className={`flex-1 text-center py-1 text-xs rounded border transition-colors ${model.connectionStatus === 'testing' ? 'text-sky-400 border-sky-200 bg-sky-50 cursor-not-allowed' : 'text-sky-500 border-sky-300 hover:text-sky-700 hover:bg-sky-50'}`}
+                      >
+                        {model.connectionStatus === 'testing' ? '测试中…' : 'API测试'}
+                      </button>
+                    </div>
+                    {/* 第二行 */}
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => updateModel({ ...model, enabled: !model.enabled })}
+                        className={`flex-1 text-center py-1 text-xs rounded transition-colors border ${model.enabled ? 'text-orange-600 border-orange-300 hover:text-orange-700 hover:bg-orange-50' : 'text-brand border-brand/30 hover:bg-brand-light'}`}
+                      >
+                        {model.enabled ? '取消启用' : '模型启动'}
+                      </button>
+                      <button
+                        onClick={() => { if (!model.locked && window.confirm(`确定要删除"${model.name}"吗？`)) { deleteModel(model.id); } }}
+                        disabled={model.locked}
+                        className={`flex-1 text-center py-1 text-xs rounded transition-colors border ${model.locked ? 'text-gray-300 border-gray-200 cursor-not-allowed' : 'text-red-500 border-red-300 hover:text-red-700 hover:bg-red-50'}`}
+                      >
+                        {model.locked ? '已锁定' : '删除'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* 新增模型弹窗 */}
-      <AddModelModal isOpen={isAddModalOpen} onClose={() => setIsAddModalOpen(false)} onAdd={addModel} />
+      {/* 新增/编辑模型弹窗 */}
+      <ModelFormModal isOpen={isModalOpen} model={editingModel} onClose={() => setIsModalOpen(false)} onSave={handleSaveModel} />
 
       {/* Toast */}
       {toast.show && (

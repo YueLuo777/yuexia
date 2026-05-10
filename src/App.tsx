@@ -5,8 +5,10 @@ import WorkbenchLayout from './sections/WorkbenchLayout';
 import PromptZone from './sections/PromptZone';
 import ApiSettings from './sections/ApiSettings';
 import MaterialsPage from './sections/MaterialsPage';
+import DbSettings from './sections/DbSettings';
 import ScriptEditorV2 from './sections/ScriptEditorV2';
 import MyNovels from './sections/MyNovels';
+import ButtonTestPage from './sections/ButtonTestPage';
 import Dashboard from './pages/Dashboard';
 
 function App() {
@@ -28,6 +30,8 @@ function App() {
           <Route path="/prompts" element={<PromptZone />} />
           <Route path="/materials" element={<MaterialsPage />} />
           <Route path="/model-manage" element={<ApiSettings />} />
+          <Route path="/db-settings" element={<DbSettings />} />
+          <Route path="/button-test" element={<ButtonTestPage />} />
         </Route>
 
         {/* 未匹配路由重定向 */}

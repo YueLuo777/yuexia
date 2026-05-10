@@ -193,20 +193,13 @@ const CARD_SETTINGS_KEY = 'novel_card_settings';
 const defaultBtnOrder = ['重命名', '封面', '导出', '删除'];
 
 const colorOptions: { value: BtnColor; label: string; bg: string; text: string }[] = [
-  { value: 'green', label: '绿', bg: 'bg-green-50', text: 'text-green-600' },
-  { value: 'orange', label: '橙', bg: 'bg-orange-50', text: 'text-orange-500' },
-  { value: 'blue', label: '蓝', bg: 'bg-blue-50', text: 'text-blue-600' },
-  { value: 'red', label: '红', bg: 'bg-red-50', text: 'text-red-500' },
-  { value: 'purple', label: '紫', bg: 'bg-purple-50', text: 'text-purple-500' },
-  { value: 'amber', label: '琥珀', bg: 'bg-amber-50', text: 'text-amber-600' },
-  { value: 'pink', label: '粉', bg: 'bg-pink-50', text: 'text-pink-500' },
-  { value: 'teal', label: '青', bg: 'bg-teal-50', text: 'text-teal-600' },
-  { value: 'indigo', label: '靛', bg: 'bg-indigo-50', text: 'text-indigo-500' },
-  { value: 'gray', label: '灰', bg: 'bg-gray-50', text: 'text-gray-600' },
+  { value: 'blue', label: '蓝色', bg: 'bg-brand', text: 'text-white hover:bg-brand-dark' },
+  { value: 'red', label: '红色', bg: 'bg-red-500', text: 'text-white hover:bg-red-600' },
+  { value: 'gray', label: '灰色', bg: 'bg-gray-100', text: 'text-gray-600 hover:bg-gray-200' },
 ];
 
 const defaultBtnColors: Record<string, BtnColor> = {
-  '重命名': 'green', '封面': 'orange', '导出': 'blue', '删除': 'red',
+  '重命名': 'blue', '封面': 'blue', '导出': 'blue', '删除': 'red',
 };
 
 function getBtnColorClasses(color: BtnColor): string {
@@ -725,7 +718,7 @@ export default function MyNovels() {
                     </label>
                     <div
                       className="bg-white rounded-xl border border-gray-200 shadow-sm p-3 flex flex-col mx-auto"
-                      style={{ width: '240px', height: '260px' }}
+                      style={{ width: '240px', height: 'auto' }}
                     >
                       {/* 空槽位网格 - 动态列数(2/3)和行数(1/2/3)，与用户设置一致 */}
                       <div

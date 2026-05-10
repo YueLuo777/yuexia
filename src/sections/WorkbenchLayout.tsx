@@ -11,7 +11,6 @@ import AIPanel from './AIPanel';
 import PublishedSidebar from './PublishedSidebar';
 import ScriptEditorV2 from './ScriptEditorV2';
 import ExtractPlotModal from './ExtractPlotModal';
-import CloudSyncModal from './CloudSyncModal';
 import { useNovelsContext } from '@/hooks/useNovels';
 
 /* ─── 通用弹窗组件 ─── */
@@ -84,7 +83,6 @@ export default function WorkbenchLayout() {
     outline: false,
     notes: false,
     extractPlot: false,
-    cloudSync: false,
   });
 
   // 设定库标签状态（从 localStorage 恢复）
@@ -120,12 +118,6 @@ export default function WorkbenchLayout() {
     } catch { /* ignore */ }
   }, [showPublished, workType]);
 
-  // 监听云同步弹窗打开事件
-  useEffect(() => {
-    const handler = () => openModal('cloudSync');
-    window.addEventListener('open_cloud_sync', handler);
-    return () => window.removeEventListener('open_cloud_sync', handler);
-  }, []);
   const handleDragStart = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -261,12 +253,6 @@ export default function WorkbenchLayout() {
       <ExtractPlotModal
         isOpen={modals.extractPlot}
         onClose={() => closeModal('extractPlot')}
-      />
-
-      {/* 云同步弹窗 */}
-      <CloudSyncModal
-        isOpen={modals.cloudSync}
-        onClose={() => closeModal('cloudSync')}
       />
 
       {/* Toast 提示 */}

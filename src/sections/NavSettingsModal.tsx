@@ -316,7 +316,7 @@ export default function NavSettingsModal({ isOpen, onClose, config, onSave, onRe
             {renderGroup(rightGroups[0], 1)}
             {renderGroup(rightGroups[1], 3)}
             {/* 用户自定义专区 */}
-            {customGroups.map((_, idx) => renderGroup(_, idx + 4))}
+            {customGroups.map((_, idx) => renderGroup(_, idx + 2))}
             {/* 新增专区按钮 */}
             {showAddGroup ? (
               <div className="flex items-center gap-2 px-2 py-2 bg-gray-50 rounded-lg">
