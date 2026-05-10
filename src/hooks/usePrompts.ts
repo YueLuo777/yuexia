@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react';
 import { trpc } from '@/providers/trpc';
 
-export type PromptCategory = '正文' | '大纲' | '细纲' | '脑洞' | '文转剧本' | '提炼';
+export type PromptCategory = '正文' | '大纲' | '细纲' | '脑洞' | '提炼';
 export type PromptVisibility = 'private' | 'public';
 
 export interface PromptItem {
@@ -24,7 +24,7 @@ const PERSONAL_PROMPTS_KEY = 'prompt_personal';
 const RECYCLE_BIN_KEY = 'prompt_recycle';
 const FAVORITES_KEY = 'prompt_favorites';
 
-const defaultCategories: PromptCategory[] = ['正文', '大纲', '细纲', '脑洞', '文转剧本', '提炼'];
+const defaultCategories: PromptCategory[] = ['正文', '大纲', '细纲', '脑洞', '提炼'];
 
 function loadPersonal(): PromptItem[] {
   try {
@@ -50,12 +50,6 @@ function loadPersonal(): PromptItem[] {
       content: '请将以下大纲节点扩展为详细的细纲，包含场景描写、对话要点、情绪节奏：\n\n{{node}}',
       category: '细纲', visibility: 'private', price: 0, usageCount: 32, isFavorite: false,
       authorId: 'local', createdAt: '2026-04-26',
-    },
-    {
-      id: 'demo-4', name: '文转剧本', description: '将小说正文自动转换为剧本格式，包含场景描述、角色对白和镜头指示',
-      content: '请将以下小说正文转换为剧本格式。要求：\n1. 场景描述用【外景/内景】开头\n2. 角色对白用「角色名：」格式\n3. 添加镜头切换指示\n4. 保持原有情节和对话内容\n\n{{content}}',
-      category: '文转剧本', visibility: 'public', price: 15, usageCount: 56, isFavorite: false,
-      authorId: 'local', createdAt: '2026-04-29',
     },
   ];
 }

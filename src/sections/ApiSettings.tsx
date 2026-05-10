@@ -198,26 +198,26 @@ function ConfigPanel({
               <span className={`text-xs font-medium ${statusColor}`}>{statusText}</span>
             </div>
           </div>
-          <input type="text" value={model.name} onChange={(e) => onChange({ ...model, name: e.target.value })} placeholder="请输入模型名称" className="w-1/2 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand transition-all placeholder:text-gray-400" />
+          <input type="text" value={model.name} onChange={(e) => onChange({ ...model, name: e.target.value })} placeholder="请输入模型名称" className="w-1/3 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand transition-all placeholder:text-gray-400" />
         </div>
 
         {/* 模型ID */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">模型ID</label>
-          <input type="text" value={model.id} onChange={(e) => onChange({ ...model, id: e.target.value })} placeholder="例如：deepseek" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand transition-all placeholder:text-gray-400" />
+          <input type="text" value={model.id} onChange={(e) => onChange({ ...model, id: e.target.value })} placeholder="例如：deepseek" className="w-1/3 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand transition-all placeholder:text-gray-400" />
         </div>
 
         {/* Base URL */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">Base URL</label>
-          <input type="text" value={model.baseUrl} onChange={(e) => onChange({ ...model, baseUrl: e.target.value })} placeholder="https://api.example.com/v1" className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand transition-all placeholder:text-gray-400" />
+          <input type="text" value={model.baseUrl} onChange={(e) => onChange({ ...model, baseUrl: e.target.value })} placeholder="https://api.example.com/v1" className="w-1/3 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand transition-all placeholder:text-gray-400" />
         </div>
 
         {/* API Key */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">API Key</label>
           <div className="relative">
-            <input type={showKey ? 'text' : 'password'} value={model.apiKey} onChange={(e) => onChange({ ...model, apiKey: e.target.value })} placeholder="请输入 API Key" className="w-full pl-3 pr-10 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand transition-all placeholder:text-gray-400" />
+            <input type={showKey ? 'text' : 'password'} value={model.apiKey} onChange={(e) => onChange({ ...model, apiKey: e.target.value })} placeholder="请输入 API Key" className="w-1/3 pl-3 pr-10 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand transition-all placeholder:text-gray-400" />
             <button onClick={() => setShowKey(!showKey)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
               {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>

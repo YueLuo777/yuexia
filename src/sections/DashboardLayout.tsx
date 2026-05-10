@@ -45,7 +45,7 @@ export default function DashboardLayout() {
   return (
     <div className="flex flex-col h-screen bg-gray-50">
       {/* 顶部品牌栏 */}
-      <header className="flex items-center justify-between px-4 h-14 bg-white border-b border-gray-200 shrink-0">
+      <header className="flex items-center justify-between px-4 h-11 bg-white border-b border-gray-200 shrink-0">
         {/* 左侧：Logo + 品牌名 */}
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-orange-500 flex items-center justify-center text-white font-bold text-base">

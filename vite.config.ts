@@ -9,7 +9,18 @@ import { defineConfig } from "vite"
 export default defineConfig({
   plugins: [
     devServer({ entry: "api/boot.ts", exclude: [/^\/(?!api\/).*$/] }),
-    react()],
+    react(),
+    {
+      name: 'hmr-client-count',
+      configureServer(server) {
+        server.middlewares.use('/__hmr_clients', (_req, res) => {
+          const count = (server as any).ws?.clients?.size ?? 0;
+          res.setHeader('Content-Type', 'text/plain');
+          res.end(String(count));
+        });
+      },
+    },
+  ],
   server: {
     port: 3000,
     hmr: true,

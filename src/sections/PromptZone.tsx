@@ -66,8 +66,8 @@ function PromptFormModal({
 
         <div className="flex-1 overflow-y-auto p-6">
           <div className="flex gap-5">
-            {/* 左栏：内容区 — 占 3/5 */}
-            <div className="flex-[3] min-w-0 space-y-4">
+            {/* 左栏：名称、说明、分类 — 占 2/5 */}
+            <div className="flex-[2] min-w-0 space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">提示词名称 <span className="text-red-400">*</span></label>
                 <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="如：章节润色"
@@ -82,19 +82,6 @@ function PromptFormModal({
                 {errors.description && <p className="text-[10px] text-red-400 mt-0.5">{errors.description}</p>}
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1.5">提示词内容 <span className="text-red-400">*</span></label>
-                <textarea value={content} onChange={(e) => setContent(e.target.value)}
-                  placeholder="输入完整的提示词内容..." rows={8}
-                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:border-brand transition-colors resize-none font-mono leading-relaxed ${errors.content ? 'border-red-300' : 'border-gray-200'}`} />
-                {errors.content && <p className="text-[10px] text-red-400 mt-0.5">{errors.content}</p>}
-              </div>
-            </div>
-
-            {/* 右栏：设置区 — 占 2/5，带左边框分隔 */}
-            <div className="flex-[2] min-w-0 pl-5 border-l border-gray-100 space-y-4">
-              <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider">设置</h3>
-
-              <div>
                 <label className="block text-xs font-medium text-gray-600 mb-2">分类</label>
                 <div className="flex gap-2 flex-wrap">
                   {categories.map((c) => (
@@ -105,27 +92,15 @@ function PromptFormModal({
                   ))}
                 </div>
               </div>
+            </div>
 
-
-
-              {/* 统计信息 — 编辑时显示实际数据，新建时全为0 */}
-              <div className="pt-3 border-t border-gray-100">
-                <h4 className="text-xs font-medium text-gray-500 mb-2">统计信息</h4>
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400">使用次数</span>
-                    <span className="text-gray-700 font-medium">{initial ? (initial.usageCount || 0) : 0} 次</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400">收藏数</span>
-                    <span className="text-gray-700 font-medium">{initial ? (initial.isFavorite ? 1 : 0) : 0} 人</span>
-                  </div>
-                  <div className="flex justify-between text-xs">
-                    <span className="text-gray-400">收益</span>
-                    <span className="text-gray-700 font-medium">{initial ? ((initial.usageCount || 0) * price) : 0} 笔力</span>
-                  </div>
-                </div>
-              </div>
+            {/* 右栏：提示词内容 — 占 3/5 */}
+            <div className="flex-[3] min-w-0">
+              <label className="block text-xs font-medium text-gray-600 mb-1.5">提示词内容 <span className="text-red-400">*</span></label>
+              <textarea value={content} onChange={(e) => setContent(e.target.value)}
+                placeholder="输入完整的提示词内容..." rows={16}
+                className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:border-brand transition-colors resize-none font-mono leading-relaxed ${errors.content ? 'border-red-300' : 'border-gray-200'}`} />
+              {errors.content && <p className="text-[10px] text-red-400 mt-0.5">{errors.content}</p>}
             </div>
           </div>
         </div>
@@ -267,6 +242,8 @@ function PersonalPromptCard({
       <div className="flex items-center justify-between shrink-0 mt-auto">
 
       </div>
+      {/* 字数统计 */}
+      <p className="text-[10px] text-gray-400 text-right mb-1">{item.content?.length || 0} 字</p>
       {/* 操作按钮行 */}
       <div className="flex items-center gap-1.5 mt-2 shrink-0">
         <button onClick={() => onToggleFav(item.id)}

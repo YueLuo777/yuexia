@@ -186,6 +186,7 @@ interface CardSettings {
   btnRows: 1 | 2 | 3;
   btnOrder: string[];
   btnColors: Record<string, BtnColor>;
+  deleteBtnPos: 'grid' | 'corner';
 }
 
 const CARD_SETTINGS_KEY = 'novel_card_settings';
@@ -224,6 +225,7 @@ const defaultCardSettings: CardSettings = {
   btnRows: 2,
   btnOrder: [...defaultBtnOrder],
   btnColors: { ...defaultBtnColors },
+  deleteBtnPos: 'corner',
 };
 
 function loadCardSettings(): CardSettings {
@@ -262,6 +264,9 @@ function loadCardSettings(): CardSettings {
       }
       if (!parsed.btnColors || typeof parsed.btnColors !== 'object') {
         parsed.btnColors = { ...defaultBtnColors };
+      }
+      if (!parsed.deleteBtnPos || !['grid', 'corner'].includes(parsed.deleteBtnPos)) {
+        parsed.deleteBtnPos = 'corner';
       }
       return parsed;
     }
@@ -455,7 +460,7 @@ export default function MyNovels() {
               <div
                 key={novel.id}
                 onClick={() => { setCurrentNovel(novel.id); navigate('/workbench'); }}
-                className="group bg-white rounded-[24px] border border-gray-100 p-3 hover:shadow-xl transition-shadow flex flex-col cursor-pointer"
+                className="group relative bg-white rounded-[24px] border border-gray-100 p-3 hover:shadow-xl transition-shadow flex flex-col cursor-pointer"
                 style={{ width: cardWidthMap[cardSettings.cardWidth], minHeight: cardHeightMap[cardSettings.cardHeight] }}
               >
                 {/* 封面区域 - 淡绿渐变圆角 */}
@@ -493,7 +498,10 @@ export default function MyNovels() {
                       '预留5': (e: React.MouseEvent) => { e.stopPropagation(); e.preventDefault(); },
                     };
                     const maxCount = cardSettings.btnPerRow * cardSettings.btnRows;
-                    const ordered = cardSettings.btnOrder.slice(0, maxCount);
+                    const cornerDelete = cardSettings.deleteBtnPos === 'corner';
+                    const ordered = cardSettings.btnOrder
+                      .filter((label) => !cornerDelete || label !== '删除')
+                      .slice(0, maxCount);
                     return (
                       <div className="grid gap-1 mt-auto" style={{ gridTemplateColumns: `repeat(${cardSettings.btnPerRow}, 1fr)` }}>
                         {ordered.map((label, bi) => {
@@ -508,6 +516,16 @@ export default function MyNovels() {
                       </div>
                     );
                   })()}
+                  {/* 右下角删除按钮 */}
+                  {cardSettings.deleteBtnPos === 'corner' && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); e.preventDefault(); openDeleteModal(novel.id); }}
+                      className="absolute bottom-3 right-3 p-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+                      title="删除"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -713,6 +731,22 @@ export default function MyNovels() {
                         </div>
                       </div>
                     </div>
+                    {/* 删除按钮位置 */}
+                    <div className="mt-3">
+                      <label className="block text-xs font-medium text-gray-600 mb-1.5">删除按钮位置</label>
+                      <div className="flex gap-1">
+                        {(['网格中','右下角'] as const).map((label, i) => {
+                          const vals: Array<'grid'|'corner'> = ['grid','corner'];
+                          const v = vals[i];
+                          return (
+                            <button key={v} onClick={() => { const next = { ...cardSettings, deleteBtnPos: v }; setCardSettings(next); saveCardSettings(next); }}
+                              className={`flex-1 px-2 py-1.5 text-[10px] rounded-md border transition-colors ${cardSettings.deleteBtnPos===v?'border-brand bg-brand-light text-brand font-medium':'border-gray-200 text-gray-500 hover:bg-gray-50'}`}>
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -830,7 +864,7 @@ export default function MyNovels() {
               {/* 弹窗底部 */}
               <div className="flex items-center justify-between px-6 py-3 border-t border-gray-100 bg-gray-50/50">
                 <button
-                  onClick={() => { const reset = { ...defaultCardSettings, btnOrder: [...defaultBtnOrder], btnColors: { ...defaultBtnColors } }; setCardSettings(reset); saveCardSettings(reset); }}
+                  onClick={() => { const reset = { ...defaultCardSettings, btnOrder: [...defaultBtnOrder], btnColors: { ...defaultBtnColors }, deleteBtnPos: 'corner' as const }; setCardSettings(reset); saveCardSettings(reset); }}
                   className="flex items-center gap-1.5 px-4 py-2 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-white transition-colors"
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
