@@ -159,45 +159,36 @@ function ConfigPanel({
           </div>
           <div>
             <h2 className="text-base font-bold text-gray-900">{model.name}</h2>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className={`text-xs font-medium ${statusColor}`}>{statusText}</span>
+              <span className="text-xs text-gray-500">{model.enabled ? '已启用' : '已禁用'}</span>
+              <button
+                type="button"
+                onClick={() => onChange({ ...model, enabled: !model.enabled })}
+                className={`relative inline-flex shrink-0 rounded-full transition-colors duration-200 ${model.enabled ? 'bg-brand' : 'bg-gray-200'}`}
+                style={{ width: '36px', height: '20px' }}
+              >
+                <span
+                  className={`absolute top-[2px] left-[2px] w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${model.enabled ? 'translate-x-4' : 'translate-x-0'}`}
+                />
+              </button>
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {/* 启用开关 */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">{model.enabled ? '已启用' : '已禁用'}</span>
-            <button
-              type="button"
-              onClick={() => onChange({ ...model, enabled: !model.enabled })}
-              className={`relative inline-flex shrink-0 rounded-full transition-colors duration-200 ${model.enabled ? 'bg-brand' : 'bg-gray-200'}`}
-              style={{ width: '36px', height: '20px' }}
-            >
-              <span
-                className={`absolute top-[2px] left-[2px] w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${model.enabled ? 'translate-x-4' : 'translate-x-0'}`}
-              />
-            </button>
-          </div>
-          <div className="w-px h-4 bg-gray-200" />
-          <button
-            onClick={() => { if (window.confirm(`确定要删除「${model.name}」吗？`)) { onDelete(model.id); } }}
-            className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-            title="删除模型"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
+        <button
+          onClick={() => { if (window.confirm(`确定要删除「${model.name}」吗？`)) { onDelete(model.id); } }}
+          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
+          title="删除模型"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
       </div>
 
       {/* 配置表单 */}
       <div className="space-y-4">
         {/* 模型名称 */}
         <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-sm font-medium text-gray-700">模型名称</label>
-            <div className="flex items-center gap-1">
-              <span className="text-xs text-gray-400">状态：</span>
-              <span className={`text-xs font-medium ${statusColor}`}>{statusText}</span>
-            </div>
-          </div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">模型名称</label>
           <input type="text" value={model.name} onChange={(e) => onChange({ ...model, name: e.target.value })} placeholder="请输入模型名称" className="w-1/3 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-light focus:border-brand transition-all placeholder:text-gray-400" />
         </div>
 
@@ -323,7 +314,7 @@ export default function ApiSettings() {
             <div className="w-8 h-8 bg-brand-light rounded-lg flex items-center justify-center">
               <Server className="w-4 h-4 text-brand" />
             </div>
-            <h1 className="text-base font-bold text-gray-900">模型设置</h1>
+            <h1 className="text-base font-bold text-gray-900">模型管理</h1>
             <span className="px-2 py-0.5 text-xs text-white bg-orange-500 rounded-md">
               已启用 {enabledCount} 个模型
             </span>
