@@ -1,0 +1,91 @@
+============================================
+月下写作 - 环境安装说明
+============================================
+
+只需要安装一次，以后直接用"启动.bat"。
+
+
+第一步：安装 PostgreSQL
+------------------------
+
+1. 下载 PostgreSQL 17
+   地址：https://www.postgresql.org/download/windows/
+   （点 "Download the installer"，选 PostgreSQL 17，Windows x86-64）
+
+   或者直接访问：
+   https://www.enterprisedb.com/downloads/postgres
+
+2. 双击下载的安装包（.exe），开始安装
+
+3. 安装过程中：
+   - 安装目录：保持默认
+   - 组件选择：全部勾选（PostgreSQL Server + pgAdmin 4 + Stack Builder + Command Line Tools）
+   - 数据目录：保持默认
+   - 密码：输入 Yuexia123456（这个密码后面会用到，记住它）
+   - 端口：保持默认 5432
+   - Locale：保持默认
+   - 一直点 Next 直到安装完成
+
+4. 安装完成后会弹出 "Stack Builder"，不要关闭它！
+   - 在 Stack Builder 左侧列表中，展开 "Spatial Extensions"
+   - 勾选 "pgvector"
+   - 点击 Next -> Next 安装
+   - 安装完成后关闭 Stack Builder
+
+
+第二步：验证安装
+----------------
+
+打开 CMD 或 PowerShell，依次执行：
+
+  cd "C:\Program Files\PostgreSQL\17\bin"
+  psql -U postgres
+  （输入密码：Yuexia123456）
+
+看到 postgres=# 提示符表示登录成功。然后执行：
+
+  CREATE DATABASE yuexia;
+  \c yuexia
+  CREATE EXTENSION vector;
+  SELECT * FROM pg_extension WHERE extname = 'vector';
+
+如果显示一行数据（extname = vector），表示全部安装成功。
+
+输入 \q 退出。
+
+
+第三步：设置环境变量
+--------------------
+
+1. 右键"此电脑" -> 属性 -> 高级系统设置 -> 环境变量
+
+2. 在"系统变量"中找到 Path，编辑 -> 新建：
+   C:\Program Files\PostgreSQL\17\bin
+
+3. 在"用户变量"中点击"新建"：
+   变量名：DATABASE_URL
+   变量值：postgresql://postgres:Yuexia123456@localhost:5432/yuexia
+
+4. 点击确定保存，关闭所有窗口。
+
+
+第四步：安装 Node.js
+--------------------
+
+1. 访问 https://nodejs.org/
+2. 下载左侧绿色的 "LTS" 版本
+3. 双击 .msi 安装包，一直点 Next 安装
+4. 安装完成后，打开新的 CMD 窗口，输入：
+   node --version
+   如果显示版本号，表示安装成功
+
+
+============================================
+安装完成后
+============================================
+
+双击运行：huanjing/首次安装.bat
+（会自动安装 npm 依赖并构建）
+
+以后每天启动：
+双击运行：huanjing/启动.bat
