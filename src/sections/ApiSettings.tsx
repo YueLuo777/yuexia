@@ -130,7 +130,7 @@ function ConfigPanel({
     return (
       <div className="flex flex-col items-center justify-center h-full text-gray-400">
         <Bot className="w-12 h-12 mb-3 text-gray-300" />
-        <p className="text-sm">请在左侧选择一个模型进行配置</p>
+        <p className="text-sm">请在上方选择一个模型进行配置</p>
       </div>
     );
   }
@@ -152,7 +152,7 @@ function ConfigPanel({
   return (
     <div className="h-full overflow-y-auto">
       {/* 模型头部信息 */}
-      <div className="flex items-center justify-between mb-5 pb-4 border-b border-gray-100">
+      <div className="mb-5 pb-4 border-b border-gray-100">
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${model.enabled ? 'bg-brand-light text-brand' : 'bg-gray-100 text-gray-400'}`}>
             <Bot className="w-5 h-5" />
@@ -162,26 +162,9 @@ function ConfigPanel({
             <div className="flex items-center gap-2 mt-0.5">
               <span className={`text-xs font-medium ${statusColor}`}>{statusText}</span>
               <span className="text-xs text-gray-500">{model.enabled ? '已启用' : '已禁用'}</span>
-              <button
-                type="button"
-                onClick={() => onChange({ ...model, enabled: !model.enabled })}
-                className={`relative inline-flex shrink-0 rounded-full transition-colors duration-200 ${model.enabled ? 'bg-brand' : 'bg-gray-200'}`}
-                style={{ width: '36px', height: '20px' }}
-              >
-                <span
-                  className={`absolute top-[2px] left-[2px] w-4 h-4 bg-white rounded-full shadow transition-transform duration-200 ${model.enabled ? 'translate-x-4' : 'translate-x-0'}`}
-                />
-              </button>
             </div>
           </div>
         </div>
-        <button
-          onClick={() => { if (window.confirm(`确定要删除「${model.name}」吗？`)) { onDelete(model.id); } }}
-          className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors shrink-0"
-          title="删除模型"
-        >
-          <Trash2 className="w-4 h-4" />
-        </button>
       </div>
 
       {/* 配置表单 */}
@@ -217,6 +200,13 @@ function ConfigPanel({
 
         {/* 底部操作按钮 */}
         <div className="flex items-center gap-3 pt-3">
+          <button
+            onClick={() => { if (window.confirm(`确定要删除「${model.name}」吗？`)) { onDelete(model.id); } }}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm text-red-600 border border-red-200 bg-white hover:bg-red-50 rounded-lg transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+            删除模型
+          </button>
           <button
             onClick={handleTest}
             disabled={status === 'testing'}
@@ -321,37 +311,46 @@ export default function ApiSettings() {
           </div>
         </div>
 
-        {/* 左右结构主体 */}
-        <div className="flex flex-1 overflow-hidden">
-          {/* 左侧导航面板 */}
-          <div className="w-[180px] flex flex-col bg-gray-50/50 border-r border-gray-200 overflow-y-auto shrink-0 p-3">
-            <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors mb-3">
-              <Plus className="w-4 h-4" />
-              <span>新增模型</span>
-            </button>
-            {settings.models.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-6 text-gray-400">
-                <Bot className="w-7 h-7 mb-1.5" />
-                <p className="text-xs text-center">暂无模型</p>
-                <p className="text-[10px] text-gray-300">点击上方按钮新增</p>
-              </div>
-            ) : (
-              <div className="space-y-1">
+        {/* 主体：卡片网格 + 配置面板 */}
+        <div className="flex flex-col flex-1 overflow-hidden">
+          {/* 模型卡片网格 */}
+          <div className="shrink-0 px-5 pt-4 pb-2 border-b border-gray-100 bg-white">
+            <div className="flex items-center gap-3 mb-3">
+              <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-brand rounded-md hover:bg-brand-dark transition-colors">
+                <Plus className="w-3.5 h-3.5" />
+                <span>新增模型</span>
+              </button>
+              {settings.models.length === 0 && (
+                <span className="text-xs text-gray-400">暂无模型，请点击新增</span>
+              )}
+            </div>
+            {settings.models.length > 0 && (
+              <div className="grid grid-cols-3 gap-3 pb-1">
                 {settings.models.map((model) => {
                   const isActive = activeModelId === model.id;
                   return (
-                    <button key={model.id} onClick={() => setActiveModelId(model.id)} className={`flex items-center gap-2 w-full px-3 py-2 text-left rounded-lg transition-colors ${isActive ? 'bg-brand-light text-brand border border-brand' : 'text-gray-600 hover:bg-gray-100 border border-transparent'}`}>
-                      <Bot className={`w-3.5 h-3.5 shrink-0 ${model.enabled ? 'text-brand' : 'text-gray-400'}`} />
-                      <span className="text-sm font-medium truncate flex-1">{model.name}</span>
-                      {model.enabled && <span className="w-1.5 h-1.5 bg-brand rounded-full shrink-0" title="已启用" />}
-                    </button>
+                    <div
+                      key={model.id}
+                      onClick={() => setActiveModelId(model.id)}
+                      className={`relative flex items-center gap-2 px-3 py-2.5 rounded-lg border cursor-pointer transition-colors ${isActive ? 'border-brand bg-brand-light/30' : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'}`}
+                    >
+                      <Bot className={`w-4 h-4 shrink-0 ${model.enabled ? 'text-brand' : 'text-gray-400'}`} />
+                      <span className="text-xs font-medium truncate flex-1">{model.name}</span>
+                      {model.enabled && <span className="w-1.5 h-1.5 bg-brand rounded-full shrink-0" />}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); updateModel({ ...model, enabled: !model.enabled }); }}
+                        className={`text-xs px-2 py-0.5 rounded border transition-colors shrink-0 ${model.enabled ? 'text-gray-500 border-gray-300 hover:text-red-500 hover:border-red-300 hover:bg-red-50' : 'text-brand border-brand hover:bg-brand-light'}`}
+                      >
+                        {model.enabled ? '取消启用' : '启用'}
+                      </button>
+                    </div>
                   );
                 })}
               </div>
             )}
           </div>
 
-          {/* 右侧配置面板 */}
+          {/* 配置面板 */}
           <div className="flex-1 p-5 overflow-y-auto bg-white">
             <ConfigPanel model={activeModel} onChange={updateModel} onDelete={deleteModel} onSave={handleSave} />
           </div>

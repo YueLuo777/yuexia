@@ -116,7 +116,7 @@ export default function ModelManageModal({ onClose }: { onClose: () => void }) {
         <div className="flex flex-1 overflow-hidden">
           {/* 左侧列表 */}
           <div className="w-[200px] flex flex-col bg-gray-50/50 border-r border-gray-200 overflow-y-auto shrink-0 p-3">
-            <button onClick={() => { setIsAddOpen(true); setActiveId(null); }} className="flex items-center gap-2 w-full px-3 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors mb-2">
+            <button onClick={() => { setIsAddOpen(true); setActiveId(null); }} className="flex items-center gap-1.5 w-full px-2.5 py-1.5 text-xs font-medium text-white bg-brand rounded-md hover:bg-brand-dark transition-colors mb-2">
               <Plus className="w-4 h-4" />
               <span>新增模型</span>
             </button>
@@ -125,9 +125,9 @@ export default function ModelManageModal({ onClose }: { onClose: () => void }) {
             ) : (
               <div className="space-y-1">
                 {models.map((m) => (
-                  <button key={m.id} onClick={() => { setActiveId(m.id); setIsAddOpen(false); }} className={`flex items-center gap-2 w-full px-3 py-2 text-left rounded-lg transition-colors ${activeId === m.id && !isAddOpen ? 'bg-brand-light text-brand border border-brand' : 'text-gray-600 hover:bg-gray-100'}`}>
-                    <span className="text-sm font-medium truncate flex-1">{m.name}</span>
-                    {m.enabled && <span className="w-2 h-2 bg-brand rounded-full shrink-0" />}
+                  <button key={m.id} onClick={() => { setActiveId(m.id); setIsAddOpen(false); }} className={`flex items-center gap-1.5 w-full px-2.5 py-1.5 text-left rounded-md transition-colors ${activeId === m.id && !isAddOpen ? 'bg-brand-light text-brand border border-brand' : 'text-gray-600 hover:bg-gray-100'}`}>
+                    <span className="text-xs font-medium truncate flex-1">{m.name}</span>
+                    {m.enabled && <span className="w-1.5 h-1.5 bg-brand rounded-full shrink-0" />}
                   </button>
                 ))}
               </div>

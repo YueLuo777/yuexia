@@ -36,7 +36,6 @@ On Error GoTo 0
 
 ' 检查端口是否已被占用（开发服务器可能已在运行）
 If IsPortReady(Port) Then
-    MsgBox "端口 " & Port & " 已被占用，开发服务器可能已在运行。" & vbCrLf & vbCrLf & "将直接打开浏览器。", vbInformation, "提示"
     OpenUrl Url
     WScript.Quit 0
 End If

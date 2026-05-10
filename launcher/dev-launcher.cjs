@@ -43,6 +43,7 @@ async function main() {
     stdio: 'inherit',
     shell: true,
     cwd: __dirname + '/..',
+    windowsHide: true,
   });
 
   const ready = await waitForServer();
@@ -53,7 +54,7 @@ async function main() {
 
   // 打开浏览器
   console.log('[启动器] 正在打开浏览器...');
-  exec(`start http://localhost:${PORT}`);
+  exec(`start http://localhost:${PORT}`, { windowsHide: true });
 
   // 等待浏览器连接（给浏览器几秒时间建立 HMR WebSocket）
   await sleep(3000);
