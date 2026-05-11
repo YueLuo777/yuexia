@@ -32,7 +32,7 @@ echo "✅ Docker 已安装"
 echo ""
 
 # 创建数据库数据目录
-mkdir -p postgres-data
+mkdir -p 数据库
 
 # 启动 PostgreSQL
 echo "🚀 正在启动 PostgreSQL + pgvector..."
@@ -54,7 +54,7 @@ if docker ps | grep -q yuexia-postgres; then
     echo "    密码: postgres"
     echo "    数据库: yuexia"
     echo ""
-    echo "  数据存储: ./postgres-data/"
+    echo "  数据存储: ./数据库/"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
     echo "📝 接下来在项目里运行:"

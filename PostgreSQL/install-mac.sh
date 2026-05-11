@@ -13,9 +13,9 @@ GRAY='\033[0;37m'
 NC='\033[0m' # No Color
 
 # 默认配置
-PROJECT_PATH="$(cd "$(dirname "$0")/../.." && pwd)"
-DATA_DIR="${PROJECT_PATH}/postgres-data"
-BACKUP_DIR="${PROJECT_PATH}/数据库"
+PROJECT_PATH="$(cd "$(dirname "$0")/.." && pwd)"
+DATA_DIR="${PROJECT_PATH}/数据库"
+BACKUP_DIR="${PROJECT_PATH}/数据库备份"
 PASSWORD="postgres"
 PORT="5432"
 PG_MAJOR="16"
@@ -153,12 +153,13 @@ if [ -f "$ENV_FILE" ]; then
 fi
 
 # 添加启动/停止别名
+PROJECT_ABS_PATH="$PROJECT_PATH"
 if ! grep -q "alias pg-start" "$SHELL_PROFILE" 2>/dev/null; then
-    cat >> "$SHELL_PROFILE" << 'EOF'
+    cat >> "$SHELL_PROFILE" << EOF
 
 # YueXia PostgreSQL 快捷命令
-alias pg-start="pg_ctl -D $(cd $(dirname ${BASH_SOURCE[0]:-$0})/../.. && pwd)/postgres-data start"
-alias pg-stop="pg_ctl -D $(cd $(dirname ${BASH_SOURCE[0]:-$0})/../.. && pwd)/postgres-data stop"
+alias pg-start="pg_ctl -D ${PROJECT_ABS_PATH}/数据库 start"
+alias pg-stop="pg_ctl -D ${PROJECT_ABS_PATH}/数据库 stop"
 alias pg-status="pg_isready"
 EOF
     echo -e "${GREEN}已添加 pg-start / pg-stop / pg-status 快捷命令${NC}"
@@ -179,8 +180,8 @@ echo -e "  ${GRAY}数据库: yuexia${NC}"
 echo -e "  ${GRAY}数据目录: ${DATA_DIR}${NC}"
 echo ""
 echo -e "${CYAN}快捷命令:${NC}"
-echo -e "  ${YELLOW}pg_ctl -D ${DATA_DIR} start${NC}   启动"
-echo -e "  ${YELLOW}pg_ctl -D ${DATA_DIR} stop${NC}    停止"
+echo -e "  ${YELLOW}pg_ctl -D ./数据库 start${NC}     启动"
+echo -e "  ${YELLOW}pg_ctl -D ./数据库 stop${NC}      停止"
 echo -e "  ${YELLOW}pg_isready${NC}                     检查状态"
 echo ""
 echo -e "${CYAN}下一步:${NC}"

@@ -10,18 +10,18 @@
 
 ```bash
 # Mac
-bash scripts/install/install.sh
+bash PostgreSQL/install.sh
 
 # Linux（需要 sudo）
-sudo bash scripts/install/install.sh
+sudo bash PostgreSQL/install.sh
 ```
 
 ### Windows
 
 ```powershell
-# 右键 scripts\install\install.ps1 -> 使用 PowerShell 运行
+# 右键 PostgreSQL\install.ps1 -> 使用 PowerShell 运行
 # 或命令行（管理员）：
-powershell -ExecutionPolicy Bypass -File scripts/install/install.ps1
+powershell -ExecutionPolicy Bypass -File PostgreSQL/install.ps1
 ```
 
 ---
@@ -32,9 +32,9 @@ powershell -ExecutionPolicy Bypass -File scripts/install/install.ps1
 
 1. ✅ 安装 PostgreSQL 16
 2. ✅ 安装 pgvector 向量扩展
-3. ✅ 数据目录设置到 `项目/postgres-data/`
+3. ✅ 数据目录设置到 `项目/数据库/`
 4. ✅ 创建数据库 `yuexia`
-5. ✅ 创建备份目录 `项目/数据库/`
+5. ✅ 创建备份目录 `项目/数据库备份/`
 6. ✅ 更新 `.env` 连接配置
 
 然后执行：
@@ -67,12 +67,12 @@ npm run dev      # 启动应用
 
 ```bash
 # install-mac.sh 或 install-linux.sh
-DATA_DIR="/你想放的位置/postgres-data"
+DATA_DIR="/你想放的位置/数据库"
 ```
 
 ```powershell
 # install.ps1
-$DataDir = "C:\你想放的位置\postgres-data"
+$DataDir = "C:\你想放的位置\数据库"
 ```
 
 ### 修改密码
@@ -94,9 +94,9 @@ DATABASE_URL=postgresql://postgres:你的密码@localhost:5432/yuexia
 ### Mac
 
 ```bash
-pg_ctl -D ./postgres-data start   # 启动
-pg_ctl -D ./postgres-data stop    # 停止
-pg_isready                         # 检查状态
+pg_ctl -D ./数据库 start    # 启动
+pg_ctl -D ./数据库 stop     # 停止
+pg_isready                   # 检查状态
 ```
 
 ### Linux
@@ -129,4 +129,4 @@ services.msc
 
 **Q: 重装系统后数据还在吗？**
 
-在！因为数据存在 `项目/postgres-data/` 文件夹下，只要这个文件夹还在，重新运行脚本即可恢复。
+在！因为数据存在 `项目/数据库/` 文件夹下，只要这个文件夹还在，重新运行脚本即可恢复。

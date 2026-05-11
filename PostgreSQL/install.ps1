@@ -8,12 +8,12 @@ param(
     [int]$Port = 5432
 )
 
-# 如果没有指定数据目录，默认放在项目下的 postgres-data
+# 如果没有指定数据目录，默认放在项目下的 数据库
 if ($DataDir -eq "") {
-    $DataDir = Join-Path $ProjectPath "postgres-data"
+    $DataDir = Join-Path $ProjectPath "数据库"
 }
 
-$BackupDir = Join-Path $ProjectPath "数据库"
+$BackupDir = Join-Path $ProjectPath "数据库备份"
 
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host "  YueXia PostgreSQL 自动安装程序 (Windows)" -ForegroundColor Cyan

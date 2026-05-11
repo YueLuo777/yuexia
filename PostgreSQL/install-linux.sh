@@ -14,9 +14,9 @@ GRAY='\033[0;37m'
 NC='\033[0m' # No Color
 
 # 默认配置
-PROJECT_PATH="$(cd "$(dirname "$0")/../.." && pwd)"
-DATA_DIR="${PROJECT_PATH}/postgres-data"
-BACKUP_DIR="${PROJECT_PATH}/数据库"
+PROJECT_PATH="$(cd "$(dirname "$0")/.." && pwd)"
+DATA_DIR="${PROJECT_PATH}/数据库"
+BACKUP_DIR="${PROJECT_PATH}/数据库备份"
 PASSWORD="postgres"
 PORT="5432"
 PG_MAJOR="16"

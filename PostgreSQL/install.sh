@@ -45,7 +45,7 @@ case "$OS" in
             echo -e "${YELLOW}需要使用 sudo 运行${NC}"
             echo ""
             echo -e "${CYAN}执行命令:${NC}"
-            echo -e "  ${GREEN}sudo bash scripts/install/install.sh${NC}"
+            echo -e "  ${GREEN}sudo bash PostgreSQL/install.sh${NC}"
             echo ""
             exit 1
         fi
@@ -61,19 +61,19 @@ case "$OS" in
         echo -e "  1. 打开 PowerShell (管理员)"
         echo -e "  2. 进入项目目录"
         echo -e "  3. 执行:"
-        echo -e "     ${GREEN}.\scripts\install\install.ps1${NC}"
+        echo -e "     ${GREEN}.\PostgreSQL\install.ps1${NC}"
         echo ""
         echo -e "${CYAN}或者手动运行:${NC}"
-        echo -e "  ${GREEN}powershell -ExecutionPolicy Bypass -File scripts/install/install.ps1${NC}"
+        echo -e "  ${GREEN}powershell -ExecutionPolicy Bypass -File PostgreSQL/install.ps1${NC}"
         echo ""
         exit 1
         ;;
     *)
         echo -e "${RED}无法检测操作系统类型: $OSTYPE${NC}"
         echo -e "${YELLOW}请手动运行对应的安装脚本:${NC}"
-        echo -e "  Linux:   ${GREEN}sudo bash scripts/install/install-linux.sh${NC}"
-        echo -e "  Mac:     ${GREEN}bash scripts/install/install-mac.sh${NC}"
-        echo -e "  Windows: ${GREEN}右键 scripts/install/install.ps1 -> 使用 PowerShell 运行${NC}"
+        echo -e "  Linux:   ${GREEN}sudo bash PostgreSQL/install-linux.sh${NC}"
+        echo -e "  Mac:     ${GREEN}bash PostgreSQL/install-mac.sh${NC}"
+        echo -e "  Windows: ${GREEN}右键 PostgreSQL/install.ps1 -> 使用 PowerShell 运行${NC}"
         echo ""
         exit 1
         ;;

@@ -11,7 +11,7 @@ import { fileURLToPath } from "url";
 
 // ─── 备份文件夹路径 ───
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BACKUP_DIR = path.resolve(__dirname, "../数据库");
+const BACKUP_DIR = path.resolve(__dirname, "../数据库备份");
 
 async function ensureBackupDir() {
   try {
