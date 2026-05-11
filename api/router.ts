@@ -8,6 +8,7 @@ import { modelRouter } from "./model-router";
 import { settingsRouter } from "./settings-router";
 import { syncRouter } from "./sync-router";
 import { plotRouter } from "./plot-router";
+import { backupRouter } from "./backup-router";
 
 export const appRouter = createRouter({
   novel: novelRouter,
@@ -19,6 +20,7 @@ export const appRouter = createRouter({
   settings: settingsRouter,
   sync: syncRouter,
   plot: plotRouter,
+  backup: backupRouter,
 });
 
 export type AppRouter = typeof appRouter;
