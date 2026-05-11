@@ -3,7 +3,6 @@ import path from "path"
 const __dirname = import.meta.dirname
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
-// import { inspectAttr } from 'kimi-plugin-inspect-react'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -22,9 +21,8 @@ export default defineConfig({
     },
   ],
   server: {
-    port: 3000,
+    port: 17328,
     hmr: true,
-    // Windows 下文件监听有时不可靠，启用 polling 确保修改立即检测
     watch: {
       usePolling: true,
       interval: 100,

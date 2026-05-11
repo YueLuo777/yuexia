@@ -103,7 +103,7 @@ export default function ModelManageModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-[250] bg-black/40 flex items-center justify-center" onClick={onClose}>
-      <div className="flex flex-col w-[900px] max-w-[95vw] h-[80vh] max-h-[80vh] bg-white rounded-xl shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+      <div className="flex flex-col w-[900px] max-w-[95vw] h-[80vh] max-h-[80vh] bg-white rounded-xl shadow-2xl overflow-hidden" style={{ transform: 'scale(1.3)', transformOrigin: 'center center' }} onClick={(e) => e.stopPropagation()}>
         {/* 弹窗头部 */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
           <h2 className="text-base font-bold text-gray-900">模型管理</h2>

@@ -270,77 +270,77 @@ export default function ApiSettings() {
             )}
           </div>
           {settings.models.length > 0 && (
-            <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-3">
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-5">
               {settings.models.map((model) => (
                 <div
                   key={model.id}
-                  className="bg-white rounded-lg border border-gray-200 p-4 hover:border-gray-300 transition-colors"
+                  className="bg-white rounded-lg border border-gray-200 p-[21px] hover:border-gray-300 transition-colors"
                 >
                   {/* 卡片头部 */}
-                  <div className="flex items-center gap-2 mb-3">
-                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${model.enabled ? 'bg-brand-light text-brand' : 'bg-gray-100 text-gray-400'}`}>
-                      <Bot className="w-4 h-4" />
+                  <div className="flex items-center gap-2.5 mb-4">
+                    <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${model.enabled ? 'bg-brand-light text-brand' : 'bg-gray-100 text-gray-400'}`}>
+                      <Bot className="w-5 h-5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm font-bold text-gray-900 truncate">{model.name}</div>
+                      <div className="text-base font-bold text-gray-900 truncate">{model.name}</div>
                     </div>
                     <button
                       onClick={() => toggleLock(model.id)}
-                      className={`shrink-0 text-xs px-2 py-0.5 rounded border transition-colors ${model.locked ? 'text-amber-600 border-amber-300 bg-amber-50 hover:bg-amber-100' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:bg-gray-50'}`}
+                      className={`shrink-0 text-sm px-2.5 py-1 rounded border transition-colors ${model.locked ? 'text-amber-600 border-amber-300 bg-amber-50 hover:bg-amber-100' : 'text-gray-400 border-gray-200 hover:text-gray-600 hover:bg-gray-50'}`}
                     >
                       {model.locked ? '已锁定' : '锁定'}
                     </button>
                   </div>
 
                   {/* 信息表 */}
-                  <div className="space-y-1.5 mb-3">
-                    <div className="flex items-center gap-1 text-xs text-gray-500">
+                  <div className="space-y-2 mb-4">
+                    <div className="flex items-center gap-1 text-sm text-gray-500">
                       <span className="shrink-0">模型ID:</span>
                       <span className="text-gray-700 truncate">{model.id}</span>
 
                     </div>
-                    <div className="flex items-center gap-1 text-xs text-gray-500">
+                    <div className="flex items-center gap-1 text-sm text-gray-500">
                       <span className="shrink-0">状态：</span>
                       {model.enabled ? (
-                        <span className={`text-xs ${model.connectionStatus === 'connected' ? 'text-emerald-600' : model.connectionStatus === 'failed' ? 'text-red-500' : model.connectionStatus === 'testing' ? 'text-amber-500' : 'text-gray-400'}`}>
+                        <span className={`text-sm ${model.connectionStatus === 'connected' ? 'text-emerald-600' : model.connectionStatus === 'failed' ? 'text-red-500' : model.connectionStatus === 'testing' ? 'text-amber-500' : 'text-gray-400'}`}>
                           {model.connectionStatus === 'connected' ? '正常' : model.connectionStatus === 'failed' ? '失败' : model.connectionStatus === 'testing' ? '测试中…' : '未测试'}
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-400">未启用</span>
+                        <span className="text-sm text-gray-400">未启用</span>
                       )}
                     </div>
                   </div>
 
                   {/* 操作按钮 */}
-                  <div className="pt-3 border-t border-gray-100 space-y-1.5">
+                  <div className="pt-4 border-t border-gray-100 space-y-2">
                     {/* 第一行 */}
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => openEditModal(model)}
-                        className="flex-1 text-center py-1 text-xs text-brand border border-brand/30 rounded hover:bg-brand-light transition-colors"
+                        className="flex-1 text-center py-1.5 text-sm text-brand border border-brand/30 rounded hover:bg-brand-light transition-colors"
                       >
                         编辑模型
                       </button>
                       <button
                         onClick={() => testConnection(model)}
                         disabled={model.connectionStatus === 'testing'}
-                        className={`flex-1 text-center py-1 text-xs rounded border transition-colors ${model.connectionStatus === 'testing' ? 'text-sky-400 border-sky-200 bg-sky-50 cursor-not-allowed' : 'text-sky-500 border-sky-300 hover:text-sky-700 hover:bg-sky-50'}`}
+                        className={`flex-1 text-center py-1.5 text-sm rounded border transition-colors ${model.connectionStatus === 'testing' ? 'text-sky-400 border-sky-200 bg-sky-50 cursor-not-allowed' : 'text-sky-500 border-sky-300 hover:text-sky-700 hover:bg-sky-50'}`}
                       >
                         {model.connectionStatus === 'testing' ? '测试中…' : 'API测试'}
                       </button>
                     </div>
                     {/* 第二行 */}
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => updateModel({ ...model, enabled: !model.enabled })}
-                        className={`flex-1 text-center py-1 text-xs rounded transition-colors border ${model.enabled ? 'text-orange-600 border-orange-300 hover:text-orange-700 hover:bg-orange-50' : 'text-brand border-brand/30 hover:bg-brand-light'}`}
+                        className={`flex-1 text-center py-1.5 text-sm rounded transition-colors border ${model.enabled ? 'text-orange-600 border-orange-300 hover:text-orange-700 hover:bg-orange-50' : 'text-brand border-brand/30 hover:bg-brand-light'}`}
                       >
                         {model.enabled ? '取消启用' : '模型启动'}
                       </button>
                       <button
                         onClick={() => { if (!model.locked && window.confirm(`确定要删除"${model.name}"吗？`)) { deleteModel(model.id); } }}
                         disabled={model.locked}
-                        className={`flex-1 text-center py-1 text-xs rounded transition-colors border ${model.locked ? 'text-gray-300 border-gray-200 cursor-not-allowed' : 'text-red-500 border-red-300 hover:text-red-700 hover:bg-red-50'}`}
+                        className={`flex-1 text-center py-1.5 text-sm rounded transition-colors border ${model.locked ? 'text-gray-300 border-gray-200 cursor-not-allowed' : 'text-red-500 border-red-300 hover:text-red-700 hover:bg-red-50'}`}
                       >
                         {model.locked ? '已锁定' : '删除'}
                       </button>

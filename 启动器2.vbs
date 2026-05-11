@@ -1,5 +1,4 @@
-' 月下写作 - 开发模式启动器 (热更新 + 自动刷新)
-' 双击启动，关闭浏览器后自动停止服务器
+' YueXia Workbench - Dev Launcher (port 17328)
 
 Option Explicit
 
@@ -15,12 +14,12 @@ Port     = 17328
 Url      = "http://localhost:" & Port
 
 If Not FSO.FolderExists(ProjPath) Then
-    MsgBox "项目文件夹不存在:" & vbCrLf & ProjPath, vbCritical, "错误"
+    MsgBox "Project folder not found:" & vbCrLf & ProjPath, vbCritical, "Error"
     WScript.Quit 1
 End If
 
 If Not FSO.FileExists(ProjPath & "\package.json") Then
-    MsgBox "package.json 未找到:" & vbCrLf & ProjPath, vbCritical, "错误"
+    MsgBox "package.json not found:" & vbCrLf & ProjPath, vbCritical, "Error"
     WScript.Quit 1
 End If
 
@@ -28,7 +27,7 @@ On Error Resume Next
 Dim NodeVer
 NodeVer = WshShell.Exec("node --version").StdOut.ReadLine()
 If Err.Number <> 0 Or NodeVer = "" Then
-    MsgBox "未找到 Node.js!" & vbCrLf & vbCrLf & "请先安装 Node.js" & vbCrLf & "https://nodejs.org", vbCritical, "错误"
+    MsgBox "Node.js not found! Please install Node.js" & vbCrLf & "https://nodejs.org", vbCritical, "Error"
     WScript.Quit 1
 End If
 On Error GoTo 0
@@ -45,13 +44,11 @@ WScript.Quit 0
 
 Function IsPortReady(P)
     On Error Resume Next
-    Dim Http
-    Set Http = CreateObject("MSXML2.ServerXMLHTTP.6.0")
-    Http.setTimeouts 1500, 1500, 1500, 1500
-    Http.Open "GET", "http://localhost:" & P & "/health", False
-    Http.Send
-    IsPortReady = (Err.Number = 0 And Http.Status = 200)
-    Set Http = Nothing
+    Dim Exec, Output
+    Set Exec = WshShell.Exec("cmd /c netstat -ano | findstr :" & P & " ")
+    Output = Exec.StdOut.ReadAll()
+    IsPortReady = (Output <> "")
+    Set Exec = Nothing
     On Error GoTo 0
 End Function
 
