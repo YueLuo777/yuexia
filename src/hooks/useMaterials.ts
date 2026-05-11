@@ -12,6 +12,8 @@ export interface Material {
   updatedAt: string;
   chapterName?: string;    // 章节名（如"我只是想修个水管"）
   chapterSerial?: number;  // 章节序号（如 1）
+  tags?: string[];         // 元素标签
+  rating?: number;         // 评分 (0-5)
 }
 
 const STORAGE_KEY = 'materials_data_v1';

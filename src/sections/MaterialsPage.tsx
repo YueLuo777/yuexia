@@ -1,11 +1,62 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
-  Plus, Search, X, Edit3, Trash2, BookOpen, Book, AlertTriangle,
+  Plus, Search, X, Edit3, Trash2, BookOpen, Book, AlertTriangle, Pencil,
 } from 'lucide-react';
 import { useMaterials } from '@/hooks/useMaterials';
 import { useNovelsContext } from '@/hooks/useNovels';
 import type { Material } from '@/hooks/useMaterials';
 // Layout removed - local app mode
+
+/* ─── 辅助函数：从 content 解析标记 ─── */
+function parseContentMarkers(content: string) {
+  // 先提取所有元数据标记的位置，然后取中间的内容作为摘要
+  const lines = content.split('\n');
+  let abstractStart = -1;
+  let abstractEnd = lines.length;
+
+  // 找【摘要】行
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith('【摘要】')) {
+      abstractStart = i;
+      break;
+    }
+  }
+
+  // 找第一个元数据标记行（【出处】【评分】【标签】等）
+  const metaMarkers = ['【出处】', '【评分】', '【标签】', '【章节】'];
+  for (let i = 0; i < lines.length; i++) {
+    if (metaMarkers.some((m) => lines[i].startsWith(m))) {
+      if (abstractStart === -1 || i > abstractStart) {
+        abstractEnd = i;
+        break;
+      }
+    }
+  }
+
+  // 提取摘要内容
+  let abstract = '';
+  if (abstractStart >= 0) {
+    // 从【摘要】行后面开始取
+    const startLine = abstractStart + 1;
+    abstract = lines.slice(startLine, abstractEnd).join('\n').trim();
+  } else {
+    // 没有【摘要】标记，取开头到第一个元数据之间的内容
+    abstract = lines.slice(0, abstractEnd).join('\n').trim();
+  }
+
+  // 提取【出处】《书名》-第X章
+  const sourceMatch = content.match(/【出处】《([^》]+)》-(第[\d一二三四五六七八九十百]+章(?:\(或第[\d-]+章\))?)/);
+  // 提取【评分】数字（支持"95分"或"80"格式）
+  const ratingMatch = content.match(/【评分】\s*(\d+)分?/);
+
+  return {
+    abstract,
+    source: sourceMatch ? sourceMatch[1] : '',
+    chapter: sourceMatch ? sourceMatch[2] : '',
+    rating: ratingMatch ? parseInt(ratingMatch[1], 10) : 0,
+    body: abstract,
+  };
+}
 
 /* ─── 删除确认弹窗 ─── */
 function DeleteConfirmModal({ isOpen, onClose, onConfirm }: {
@@ -268,41 +319,44 @@ export default function MaterialsPage() {
             ) : (
               <div className="grid grid-cols-4 gap-3">
                 {filteredMaterials.map((m) => {
-                  // 去掉内容开头的来源标记，只保留正文
-                  const cleanContent = m.content.replace(/^【来源：[^】]+】\n\n/, '');
+                  const markers = parseContentMarkers(m.content);
                   return (
-                    <div key={m.id} className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md transition-shadow flex flex-col h-full">
-                      {/* 第一行：书名 */}
-                      <div className="text-xs text-gray-500 mb-0.5">
-                        <span className="text-gray-400">书名：</span>
-                        <span className="text-gray-700 font-medium">{m.novelTitle}</span>
+                    <div key={m.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow flex flex-col h-full">
+                      {/* 摘要（直接显示内容，不显示标记） */}
+                      <div className="mb-2">
+                        <span className="text-[10px] text-gray-400 font-medium">摘要：</span>
+                        <p className="text-xs text-gray-700 leading-relaxed line-clamp-4 mt-0.5 whitespace-pre-wrap">{markers.abstract}</p>
                       </div>
-                      {/* 第二行：章节 */}
-                      <div className="text-xs text-gray-500 mb-1.5">
-                        <span className="text-gray-400">章节：</span>
-                        <span className="text-gray-700">
-                          第{m.chapterSerial || '?'}章{m.chapterName ? ` ${m.chapterName}` : ''}
-                        </span>
+                      {/* 书名（从 content 解析） */}
+                      <div className="mb-1">
+                        <span className="text-[10px] text-gray-400 font-medium">书名：</span>
+                        <span className="text-xs text-gray-700">《{markers.source || m.novelTitle}》</span>
                       </div>
-                      {/* 第三行：剧情点标签 */}
-                      <div className="text-xs text-gray-500 mb-0.5">
-                        <span className="text-gray-400">剧情点：</span>
+                      {/* 章节（从 content 解析） */}
+                      <div className="mb-1">
+                        <span className="text-[10px] text-gray-400 font-medium">章节：</span>
+                        <span className="text-xs text-gray-700">{markers.chapter || `第${m.chapterSerial || '?'}章`}</span>
                       </div>
-                      {/* 提炼正文 */}
-                      <p className="text-xs text-gray-600 leading-relaxed line-clamp-6 mb-2 whitespace-pre-wrap flex-1">{cleanContent}</p>
-                      {/* 底部：操作按钮 + 时间 */}
-                      <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-50">
-                        <div className="flex items-center gap-0.5">
+                      {/* 评分（从 content 解析） */}
+                      <div className="mb-3">
+                        <span className="text-[10px] text-gray-400 font-medium">评分：</span>
+                        <span className="text-xs text-gray-700">{markers.rating || m.rating || 0}分</span>
+                      </div>
+                      {/* 底部：左日期 + 右编辑/删除文字按钮 */}
+                      <div className="flex items-center justify-between mt-auto pt-2 border-t border-gray-100">
+                        <span className="text-[10px] text-gray-400">{m.updatedAt}</span>
+                        <div className="flex items-center gap-3">
                           <button onClick={() => handleEdit(m)}
-                            className="p-1 text-gray-400 hover:text-brand hover:bg-brand-light rounded transition-colors">
-                            <Edit3 className="w-3 h-3" />
+                            className="text-[11px] text-brand hover:underline flex items-center gap-0.5">
+                            <Pencil className="w-3 h-3" />
+                            编辑
                           </button>
                           <button onClick={() => setDeleteTargetId(m.id)}
-                            className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded transition-colors">
+                            className="text-[11px] text-red-400 hover:text-red-600 hover:underline flex items-center gap-0.5">
                             <Trash2 className="w-3 h-3" />
+                            删除
                           </button>
                         </div>
-                        <span className="text-[10px] text-gray-400">{m.updatedAt}</span>
                       </div>
                     </div>
                   );

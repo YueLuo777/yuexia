@@ -1,42 +1,40 @@
-﻿import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Plus, Search, Trash2, Star, Lock, Unlock, RefreshCw,
-  Sparkles, X, Edit3,
-  BookOpen, Globe,
+  Sparkles, X, Edit3, BookOpen, Globe, Check,
 } from 'lucide-react';
-// Layout removed - local app mode
 import { usePrompts } from '@/hooks/usePrompts';
 import type { PromptItem, PromptCategory, PromptVisibility } from '@/hooks/usePrompts';
 
 /* ─── 创建/编辑弹窗 ─── */
 function PromptFormModal({
-  isOpen, onClose, onSave, initial, categories,
+  isOpen, onClose, onSave, initial, categories, preferredCategory,
 }: {
   isOpen: boolean; onClose: () => void;
   onSave: (data: Omit<PromptItem, 'id' | 'usageCount' | 'isFavorite' | 'authorId' | 'createdAt'>) => void;
   initial?: PromptItem | null;
-  categories: PromptCategory[];
+  categories: string[];
+  preferredCategory?: string;
 }) {
   const [name, setName] = useState(initial?.name || '');
   const [description, setDescription] = useState(initial?.description || '');
   const [content, setContent] = useState(initial?.content || '');
-  const [category, setCategory] = useState<PromptCategory>(initial?.category || '正文');
+  const [category, setCategory] = useState<string>(initial?.category || preferredCategory || categories[0] || '未分类');
   const [_visibility, setVisibility] = useState<PromptVisibility>(initial?.visibility || 'private');
   const [price, setPrice] = useState(initial?.price ?? 0);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  // 用 useEffect 监听 isOpen 和 initial 变化，每次打开弹窗都正确初始化表单
   useEffect(() => {
     if (isOpen) {
       setName(initial?.name || '');
       setDescription(initial?.description || '');
       setContent(initial?.content || '');
-      setCategory(initial?.category || '正文');
+      setCategory(initial?.category || preferredCategory || categories[0] || '未分类');
       setVisibility(initial?.visibility || 'private');
       setPrice(initial?.price ?? 0);
       setErrors({});
     }
-  }, [isOpen, initial]);
+  }, [isOpen, initial, preferredCategory, categories]);
 
   if (!isOpen) return null;
 
@@ -66,7 +64,6 @@ function PromptFormModal({
 
         <div className="flex-1 overflow-y-auto p-6">
           <div className="flex gap-5">
-            {/* 左栏：名称、说明、分类 — 占 2/5 */}
             <div className="flex-[2] min-w-0 space-y-4">
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">提示词名称 <span className="text-red-400">*</span></label>
@@ -77,9 +74,8 @@ function PromptFormModal({
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">提示词说明</label>
                 <textarea value={description} onChange={(e) => setDescription(e.target.value)}
-                  placeholder="简短描述该提示词的用途和效果（其他用户在公共库中只能看到这个说明）" rows={2}
+                  placeholder="简短描述该提示词的用途和效果" rows={2}
                   className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none focus:border-brand transition-colors resize-none ${errors.description ? 'border-red-300' : 'border-gray-200'}`} />
-                {errors.description && <p className="text-[10px] text-red-400 mt-0.5">{errors.description}</p>}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-2">分类</label>
@@ -94,7 +90,6 @@ function PromptFormModal({
               </div>
             </div>
 
-            {/* 右栏：提示词内容 — 占 3/5 */}
             <div className="flex-[3] min-w-0">
               <label className="block text-xs font-medium text-gray-600 mb-1.5">提示词内容 <span className="text-red-400">*</span></label>
               <textarea value={content} onChange={(e) => setContent(e.target.value)}
@@ -212,7 +207,7 @@ function DeleteConfirmModal({
   );
 }
 
-/* ─── 个人提示词卡片（固定高度，底部对齐） ─── */
+/* ─── 个人提示词卡片 ─── */
 function PersonalPromptCard({
   item, onEdit, onDelete, onToggleFav, onToggleLock,
 }: {
@@ -221,13 +216,11 @@ function PersonalPromptCard({
   return (
     <div className="group relative bg-white rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition-all p-3 flex flex-col"
       style={{ width: '240px', height: '200px' }}>
-      {/* 标题行 */}
       <div className="flex items-start justify-between mb-1.5 shrink-0">
         <div className="flex items-center gap-1.5 min-w-0">
           <h3 className="text-sm font-bold text-gray-900 truncate">{item.name}</h3>
-          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-gray-200 text-gray-400">{item.category}</span>
+          <span className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-500">{item.category}</span>
         </div>
-        {/* 锁定按钮 */}
         <button
           onClick={() => onToggleLock(item.id)}
           title={item.isLocked ? '已锁定，点击解锁' : '点击锁定'}
@@ -236,15 +229,9 @@ function PersonalPromptCard({
           {item.isLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
         </button>
       </div>
-      {/* 说明（固定2行） */}
       <p className="text-xs text-gray-500 leading-relaxed mb-2 line-clamp-2 shrink-0">{item.description}</p>
-      {/* 底部信息 + 操作按钮 */}
-      <div className="flex items-center justify-between shrink-0 mt-auto">
-
-      </div>
-      {/* 字数统计 */}
+      <div className="flex items-center justify-between shrink-0 mt-auto"></div>
       <p className="text-[10px] text-gray-400 text-right mb-1">{item.content?.length || 0} 字</p>
-      {/* 操作按钮行 */}
       <div className="flex items-center gap-1.5 mt-2 shrink-0">
         <button onClick={() => onToggleFav(item.id)}
           className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs transition-colors ${item.isFavorite ? 'text-orange-600 bg-orange-50 hover:bg-orange-100' : 'text-orange-400 bg-orange-50/60 hover:bg-orange-100 hover:text-orange-600'}`}>
@@ -260,9 +247,7 @@ function PersonalPromptCard({
           disabled={item.isLocked}
           title={item.isLocked ? '已锁定，无法删除' : '删除'}
           className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-md text-xs transition-colors ${
-            item.isLocked
-              ? 'text-gray-300 bg-gray-50 cursor-not-allowed'
-              : 'text-red-400 bg-red-50 hover:bg-red-100 hover:text-red-600'
+            item.isLocked ? 'text-gray-300 bg-gray-50 cursor-not-allowed' : 'text-red-400 bg-red-50 hover:bg-red-100 hover:text-red-600'
           }`}>
           <Trash2 className="w-3.5 h-3.5" />
           <span>删除</span>
@@ -275,25 +260,25 @@ function PersonalPromptCard({
 /* ─── 主页面 ─── */
 export default function PromptZone({ embedded = false }: { embedded?: boolean }) {
   const {
-    personalPrompts, publicPrompts, recycleBin, categories,
+    personalPrompts, recycleBin, favoriteIds, categories,
     addPrompt, updatePrompt, deletePrompt, restorePrompt, permanentDelete,
-    toggleFavorite,
-    toggleLockPrompt,
-    getFilteredPersonal, getFilteredPublic,
+    toggleFavorite, toggleLockPrompt, usePrompt,
+    addCategory, removeCategory,
   } = usePrompts();
 
-  const [activeTab, setActiveTab] = useState<'personal' | 'public'>('personal');
-  const [sortOrder] = useState<'private-first' | 'public-first'>('private-first');
-
-  // 个人和公共各自独立的分类筛选状态
-  const [personalCategory, setPersonalCategory] = useState<PromptCategory | undefined>(undefined);
-  const [publicCategory, setPublicCategory] = useState<PromptCategory | undefined>(undefined);
-
+  const [activeTab, setActiveTab] = useState<'personal' | 'public' | 'default'>('personal');
+  const [activeCategory, setActiveCategory] = useState<string | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState<PromptItem | null>(null);
   const [showRecycle, setShowRecycle] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+
+  // 新建分类
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categoryError, setCategoryError] = useState('');
+  const categoryInputRef = useRef<HTMLInputElement>(null);
 
   // 删除确认弹窗状态
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -305,35 +290,25 @@ export default function PromptZone({ embedded = false }: { embedded?: boolean })
     setTimeout(() => setToast(null), 2500);
   };
 
-  // 当前激活的分类（根据 tab 切换）
-  const activeCategory = activeTab === 'personal' ? personalCategory : publicCategory;
-  const setActiveCategory = (cat: PromptCategory | undefined) => {
-    if (activeTab === 'personal') setPersonalCategory(cat);
-    else setPublicCategory(cat);
+  // 分类筛选后的列表
+  const getFilteredList = (tab: 'personal' | 'public' | 'default') => {
+    let list: PromptItem[] = [];
+    if (tab === 'personal') {
+      list = activeCategory ? personalPrompts.filter((p) => p.category === activeCategory) : [...personalPrompts];
+    } else if (tab === 'public') {
+      list = activeCategory ? personalPrompts.filter((p) => p.category === activeCategory) : [...personalPrompts];
+    } else {
+      list = activeCategory ? personalPrompts.filter((p) => p.category === activeCategory) : [...personalPrompts];
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      list = list.filter((p) => p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q));
+    }
+    list = [...list].sort((a, b) => (b.isFavorite ? 1 : 0) - (a.isFavorite ? 1 : 0));
+    return list;
   };
 
-  // 排序只影响个人提示词列表（个人提示词有 private/public 两种可见性）
-
-  // 筛选后的列表（收藏的排在前面，再按可见性排序）
-  const personalList = useMemo(() => {
-    let list = getFilteredPersonal(personalCategory);
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter((p) => p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q));
-    }
-    list = [...list].sort((a, b) => (b.isFavorite ? 1 : 0) - (a.isFavorite ? 1 : 0));
-    return list;
-  }, [getFilteredPersonal, personalCategory, searchQuery, sortOrder]);
-
-  const publicList = useMemo(() => {
-    let list = getFilteredPublic(publicCategory);
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter((p) => p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q));
-    }
-    list = [...list].sort((a, b) => (b.isFavorite ? 1 : 0) - (a.isFavorite ? 1 : 0));
-    return list;
-  }, [getFilteredPublic, publicCategory, searchQuery]);
+  const currentList = getFilteredList(activeTab);
 
   const handleCreate = (data: Omit<PromptItem, 'id' | 'usageCount' | 'isFavorite' | 'authorId' | 'createdAt'>) => {
     addPrompt(data);
@@ -349,8 +324,7 @@ export default function PromptZone({ embedded = false }: { embedded?: boolean })
   };
 
   const handleDeleteRequest = (id: string) => {
-    // 检查是否锁定
-    const item = personalPrompts.find((p) => p.id === id) || publicPrompts.find((p) => p.id === id);
+    const item = personalPrompts.find((p) => p.id === id);
     if (item?.isLocked) {
       showToast('提示词已锁定，无法删除');
       return;
@@ -374,10 +348,157 @@ export default function PromptZone({ embedded = false }: { embedded?: boolean })
   const openEdit = (item: PromptItem) => { setEditingItem(item); setShowForm(true); };
   const openCreate = () => { setEditingItem(null); setShowForm(true); };
 
-  const tabStyle = (tab: 'personal' | 'public') =>
+  const tabStyle = (tab: 'personal' | 'public' | 'default') =>
     `flex items-center gap-1.5 px-5 py-2 text-sm rounded-full transition-all cursor-pointer ${
       activeTab === tab ? 'text-white bg-gray-900 shadow-sm' : 'text-gray-500 bg-white border border-gray-200 hover:bg-gray-50'
     }`;
+
+  // 新建分类
+  const handleAddCategory = () => {
+    const name = newCategoryName.trim();
+    if (!name) {
+      setCategoryError('请输入分类名称');
+      return;
+    }
+    if (categories.includes(name)) {
+      setCategoryError('该分类已存在');
+      return;
+    }
+    const ok = addCategory(name);
+    if (ok) {
+      showToast(`分类「${name}」创建成功`);
+      setNewCategoryName('');
+      setCategoryError('');
+      setIsAddingCategory(false);
+    }
+  };
+
+  const closeCategoryModal = () => {
+    setIsAddingCategory(false);
+    setNewCategoryName('');
+    setCategoryError('');
+  };
+
+  // 分类筛选条
+  const CategoryFilterBar = () => (
+    <div className="flex items-center gap-2 mb-5 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap flex-1">
+        <button onClick={() => setActiveCategory(undefined)}
+          className={`px-4 py-1.5 text-xs rounded-full transition-colors ${!activeCategory ? 'text-white bg-gray-900' : 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-50'}`}>
+          全部
+        </button>
+        {categories.map((cat) => (
+          <button key={cat} onClick={() => setActiveCategory(cat)}
+            className={`px-4 py-1.5 text-xs rounded-full transition-colors ${activeCategory === cat ? 'text-white bg-gray-900' : 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-50'}`}>
+            {cat}
+          </button>
+        ))}
+        <button
+          onClick={() => setIsAddingCategory(true)}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs text-brand border border-brand/30 rounded-full hover:bg-brand-light transition-colors"
+          title="新建分类"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          新建
+        </button>
+      </div>
+      {/* 删除当前选中的分类 */}
+      {activeCategory && activeCategory !== '未分类' && (
+        <button
+          onClick={() => {
+            if (confirm(`确定要删除分类「${activeCategory}」吗？该分类下的提示词将移到「未分类」。`)) {
+              removeCategory(activeCategory);
+              setActiveCategory(undefined);
+            }
+          }}
+          className="flex items-center gap-1 px-3 py-1.5 text-xs text-red-500 border border-red-200 rounded-full hover:bg-red-50 transition-colors"
+          title={`删除分类「${activeCategory}」`}
+        >
+          <Trash2 className="w-3 h-3" />
+          删除「{activeCategory}」
+        </button>
+      )}
+    </div>
+  );
+
+  /* ─── 新建分类弹窗 ─── */
+  const CategoryCreateModal = () => {
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const [composing, setComposing] = useState(false);
+    const [localName, setLocalName] = useState('');
+
+    useEffect(() => {
+      if (isAddingCategory) {
+        setLocalName('');
+        setCategoryError('');
+        setTimeout(() => textareaRef.current?.focus(), 100);
+      }
+    }, [isAddingCategory]);
+
+    const submit = () => {
+      const name = localName.trim();
+      if (!name) { setCategoryError('请输入分类名称'); return; }
+      if (categories.includes(name)) { setCategoryError('该分类已存在'); return; }
+      addCategory(name);
+      showToast(`分类「${name}」创建成功`);
+      setIsAddingCategory(false);
+      setLocalName('');
+    };
+
+    if (!isAddingCategory) return null;
+    return (
+      <div className="fixed inset-0 z-[55] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+        <div className="w-[420px] max-w-[90vw] bg-white rounded-xl shadow-2xl p-6">
+          <h3 className="text-base font-bold text-gray-900 mb-1">新建分类</h3>
+          <p className="text-xs text-gray-400 mb-4">输入新分类的名称</p>
+          <textarea
+            ref={textareaRef}
+            value={localName}
+            onChange={(e) => { setLocalName(e.target.value); setCategoryError(''); }}
+            onCompositionStart={() => setComposing(true)}
+            onCompositionEnd={() => setComposing(false)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !composing) { e.preventDefault(); submit(); } }}
+            placeholder="例如：脑洞、大纲、人设..."
+            rows={2}
+            className="w-full px-4 py-3 text-sm text-gray-900 bg-white border border-gray-300 rounded-lg focus:outline-none focus:border-brand focus:ring-2 focus:ring-brand/20 resize-none"
+            style={{ color: '#111827', backgroundColor: '#ffffff', fontSize: '14px', lineHeight: '1.5' }}
+          />
+          {categoryError && <p className="text-xs text-red-500 mt-2">{categoryError}</p>}
+          <div className="flex items-center justify-end gap-3 mt-5">
+            <button onClick={() => { setIsAddingCategory(false); setLocalName(''); }} className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">取消</button>
+            <button onClick={submit} className="px-5 py-2 text-sm text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors">创建</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // 空状态
+  const EmptyState = ({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) => (
+    <div className="flex flex-col items-center justify-center py-20">
+      {icon}
+      <p className="text-sm text-gray-500 mb-1">{title}</p>
+      <p className="text-xs text-gray-400 mb-4">{subtitle}</p>
+      <button onClick={openCreate} className="flex items-center gap-1.5 px-4 py-2 text-sm text-brand border border-brand rounded-md hover:bg-brand-light transition-colors">
+        <Plus className="w-4 h-4" /> 创建提示词
+      </button>
+    </div>
+  );
+
+  // 列表渲染
+  const PromptList = ({ list }: { list: PromptItem[] }) => {
+    if (list.length === 0) {
+      return <EmptyState icon={<Sparkles className="w-12 h-12 text-gray-200 mb-4" />} title="暂无提示词" subtitle="点击「创建提示词」开始添加" />;
+    }
+    return (
+      <div className="flex flex-wrap gap-4">
+        {list.map((item) => (
+          <PersonalPromptCard key={item.id} item={item}
+            onEdit={openEdit} onDelete={handleDeleteRequest} onToggleFav={toggleFavorite} onToggleLock={toggleLockPrompt} />
+        ))}
+      </div>
+    );
+  };
 
   const mainContent = (
     <div className={`flex-1 overflow-y-auto ${embedded ? 'p-4' : 'p-6'}`}>
@@ -403,7 +524,7 @@ export default function PromptZone({ embedded = false }: { embedded?: boolean })
         </div>
       </div>
 
-      {/* 切换标签 + 排序 + 搜索 */}
+      {/* 切换标签 + 搜索 */}
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2">
           <button onClick={() => setActiveTab('personal')} className={tabStyle('personal')}>
@@ -412,9 +533,12 @@ export default function PromptZone({ embedded = false }: { embedded?: boolean })
           </button>
           <button onClick={() => setActiveTab('public')} className={tabStyle('public')}>
             剧本提示词
-            <span className={`text-xs ${activeTab === 'public' ? 'text-gray-300' : 'text-gray-400'}`}>{publicList.length}</span>
+            <span className={`text-xs ${activeTab === 'public' ? 'text-gray-300' : 'text-gray-400'}`}>{personalPrompts.length}</span>
           </button>
-
+          <button onClick={() => setActiveTab('default')} className={tabStyle('default')}>
+            默认提示词
+            <span className={`text-xs ${activeTab === 'default' ? 'text-gray-300' : 'text-gray-400'}`}>{personalPrompts.length}</span>
+          </button>
         </div>
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
@@ -424,61 +548,11 @@ export default function PromptZone({ embedded = false }: { embedded?: boolean })
         </div>
       </div>
 
-      {/* 分类筛选（各自独立） */}
-      <div className="flex items-center gap-2 mb-5">
-        <button onClick={() => setActiveCategory(undefined)}
-          className={`px-4 py-1.5 text-xs rounded-full transition-colors ${!activeCategory ? 'text-white bg-gray-900' : 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-50'}`}>
-          全部
-        </button>
-        {categories.map((cat) => (
-          <button key={cat} onClick={() => setActiveCategory(cat)}
-            className={`px-4 py-1.5 text-xs rounded-full transition-colors ${activeCategory === cat ? 'text-white bg-gray-900' : 'text-gray-600 bg-white border border-gray-200 hover:bg-gray-50'}`}>
-            {cat}
-          </button>
-        ))}
-      </div>
+      {/* 分类筛选（所有 tab 都显示） */}
+      <CategoryFilterBar />
 
-      {/* 个人提示词列表 */}
-      {activeTab === 'personal' && (
-        <>
-          {personalList.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20">
-              <Sparkles className="w-12 h-12 text-gray-200 mb-4" />
-              <p className="text-sm text-gray-500 mb-1">暂无提示词</p>
-              <p className="text-xs text-gray-400 mb-4">点击"创建提示词"开始添加你的第一个提示词</p>
-              <button onClick={openCreate} className="flex items-center gap-1.5 px-4 py-2 text-sm text-brand border border-brand rounded-md hover:bg-brand-light transition-colors">
-                <Plus className="w-4 h-4" /> 创建提示词
-              </button>
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-4">
-              {personalList.map((item) => (
-                <PersonalPromptCard key={item.id} item={item}
-                  onEdit={openEdit} onDelete={handleDeleteRequest} onToggleFav={toggleFavorite} onToggleLock={toggleLockPrompt} />
-              ))}
-            </div>
-          )}
-        </>
-      )}
-
-      {/* 公共提示词列表 — 与个人提示词使用相同卡片格式 */}
-      {activeTab === 'public' && (
-        <>
-          {publicList.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20">
-              <Globe className="w-12 h-12 text-gray-200 mb-4" />
-              <p className="text-sm text-gray-500">暂无匹配的公共提示词</p>
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-4">
-              {publicList.map((item) => (
-                <PersonalPromptCard key={item.id} item={item}
-                  onEdit={openEdit} onDelete={handleDeleteRequest} onToggleFav={toggleFavorite} onToggleLock={toggleLockPrompt} />
-              ))}
-            </div>
-          )}
-        </>
-      )}
+      {/* 提示词列表（三个 tab 共享同一套数据，仅通过分类区分） */}
+      <PromptList list={currentList} />
     </div>
   );
 
@@ -486,10 +560,12 @@ export default function PromptZone({ embedded = false }: { embedded?: boolean })
     return (
       <div className="flex flex-col h-full overflow-hidden">
         {mainContent}
+        <CategoryCreateModal />
         <PromptFormModal
           key={editingItem?.id || 'create-new'}
           isOpen={showForm} onClose={() => { setShowForm(false); setEditingItem(null); }}
-          onSave={editingItem ? handleUpdate : handleCreate} initial={editingItem} categories={categories} />
+          onSave={editingItem ? handleUpdate : handleCreate} initial={editingItem} categories={categories}
+          preferredCategory={activeCategory} />
         <RecycleModal
           isOpen={showRecycle} onClose={() => setShowRecycle(false)}
           recycleBin={recycleBin} onRestore={restorePrompt} onPermanentDelete={permanentDelete} />
@@ -508,10 +584,12 @@ export default function PromptZone({ embedded = false }: { embedded?: boolean })
   return (
     <div className="h-screen flex flex-col bg-gray-50">
       {mainContent}
+      <CategoryCreateModal />
       <PromptFormModal
         key={editingItem?.id || 'create-new'}
         isOpen={showForm} onClose={() => { setShowForm(false); setEditingItem(null); }}
-        onSave={editingItem ? handleUpdate : handleCreate} initial={editingItem} categories={categories} />
+        onSave={editingItem ? handleUpdate : handleCreate} initial={editingItem} categories={categories}
+        preferredCategory={activeCategory} />
       <RecycleModal
         isOpen={showRecycle} onClose={() => setShowRecycle(false)}
         recycleBin={recycleBin} onRestore={restorePrompt} onPermanentDelete={permanentDelete} />

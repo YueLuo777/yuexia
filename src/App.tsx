@@ -12,6 +12,7 @@ import ButtonTestPage from './sections/ButtonTestPage';
 import Test1Page from './sections/Test1Page';
 import IdeaGenerator from './sections/IdeaGenerator';
 import OutlineGenerator from './sections/OutlineGenerator';
+import IdeaLibrary from './sections/IdeaLibrary';
 import Dashboard from './pages/Dashboard';
 
 function App() {
@@ -38,6 +39,7 @@ function App() {
           <Route path="/test1" element={<Test1Page />} />
           <Route path="/idea-generator" element={<IdeaGenerator />} />
           <Route path="/outline-generator" element={<OutlineGenerator />} />
+          <Route path="/idea-library" element={<IdeaLibrary />} />
         </Route>
 
         {/* 未匹配路由重定向 */}

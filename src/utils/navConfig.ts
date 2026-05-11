@@ -5,13 +5,13 @@
 
 import {
   User, LayoutGrid, BookOpen, FileText, Film, Database, Users,
-  Settings, FolderOpen, FlaskConical, Lightbulb, ListTree,
+  Settings, FolderOpen, FlaskConical, Lightbulb, ListTree, Library,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // ── icon 名称到组件的映射 ──
 export const iconMap: Record<string, LucideIcon> = {
-  User, LayoutGrid, BookOpen, FileText, Film, Database, Users, Settings, FolderOpen, FlaskConical, Lightbulb, ListTree,
+  User, LayoutGrid, BookOpen, FileText, Film, Database, Users, Settings, FolderOpen, FlaskConical, Lightbulb, ListTree, Library,
 };
 
 export function getIconByName(name: string): LucideIcon {
@@ -64,6 +64,7 @@ export const DEFAULT_NAV_CONFIG: NavGroupConfig[] = [
     items: [
       { iconName: 'Lightbulb', label: '脑洞生成器', to: '/idea-generator' },
       { iconName: 'ListTree', label: '大纲生成器', to: '/outline-generator' },
+      { iconName: 'Library', label: '脑洞库', to: '/idea-library' },
     ],
   },
   {

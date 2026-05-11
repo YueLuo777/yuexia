@@ -224,42 +224,34 @@ function loadCardSettings(): CardSettings {
     const saved = localStorage.getItem(CARD_SETTINGS_KEY);
     if (saved) {
       const parsed = JSON.parse(saved);
-      // 校验 btnPerRow
-      if (!parsed.btnPerRow || ![2, 3].includes(parsed.btnPerRow)) {
-        parsed.btnPerRow = 3;
+      // 清理 btnOrder：过滤空字符串和预留，只保留有效按钮
+      let savedOrder: string[] = [];
+      if (Array.isArray(parsed.btnOrder) && parsed.btnOrder.length > 0) {
+        savedOrder = parsed.btnOrder.filter(
+          (label: string) => !!label && label !== '' && !label.startsWith('预留') && !label.startsWith('空')
+        );
       }
-      // 校验 btnRows（关键修复：旧版本可能保存了非法值）
-      if (!parsed.btnRows || ![1, 2, 3].includes(parsed.btnRows)) {
-        parsed.btnRows = 3;
+      // 如果保存的顺序为空或全部无效，使用默认
+      if (savedOrder.length === 0) {
+        savedOrder = [...defaultBtnOrder];
       }
-      if (!parsed.buttonFontWeight) {
-        parsed.buttonFontWeight = 'medium';
-      }
-      // 清理 btnOrder：去重、过滤空字符串、补全缺失按钮、限制长度
-      if (!parsed.btnOrder || !Array.isArray(parsed.btnOrder)) {
-        parsed.btnOrder = [...defaultBtnOrder];
-      } else {
-        // 过滤空字符串并去重（保留第一次出现）
-        const seen = new Set<string>();
-        parsed.btnOrder = parsed.btnOrder.filter((item: string) => {
-          if (!item || seen.has(item)) return false;
-          seen.add(item);
-          return true;
-        });
-        // 补充缺失的按钮到末尾
-        for (const btn of defaultBtnOrder) {
-          if (!seen.has(btn)) parsed.btnOrder.push(btn);
-        }
-        // 限制最多9个（3×3最大值）
-        if (parsed.btnOrder.length > 9) parsed.btnOrder = parsed.btnOrder.slice(0, 9);
-      }
-      if (!parsed.btnColors || typeof parsed.btnColors !== 'object') {
-        parsed.btnColors = { ...defaultBtnColors };
-      }
-      return parsed;
+      const merged: CardSettings = {
+        cardWidth: ['small', 'medium', 'large'].includes(parsed.cardWidth) ? parsed.cardWidth : defaultCardSettings.cardWidth,
+        cardHeight: ['small', 'medium', 'large'].includes(parsed.cardHeight) ? parsed.cardHeight : defaultCardSettings.cardHeight,
+        statFontSize: ['small', 'medium', 'large'].includes(parsed.statFontSize) ? parsed.statFontSize : defaultCardSettings.statFontSize,
+        buttonFontSize: ['small', 'medium', 'large'].includes(parsed.buttonFontSize) ? parsed.buttonFontSize : defaultCardSettings.buttonFontSize,
+        buttonFontWeight: ['normal', 'medium', 'bold'].includes(parsed.buttonFontWeight) ? parsed.buttonFontWeight : defaultCardSettings.buttonFontWeight,
+        btnPerRow: [2, 3].includes(parsed.btnPerRow) ? parsed.btnPerRow : defaultCardSettings.btnPerRow,
+        btnRows: [1, 2, 3].includes(parsed.btnRows) ? parsed.btnRows : defaultCardSettings.btnRows,
+        btnOrder: savedOrder,
+        btnColors: (parsed.btnColors && typeof parsed.btnColors === 'object')
+          ? parsed.btnColors
+          : { ...defaultBtnColors },
+      };
+      return merged;
     }
-  } catch {}
-  return defaultCardSettings;
+  } catch (e) { console.warn('加载卡片设置失败:', e); }
+  return { ...defaultCardSettings };
 }
 
 function saveCardSettings(settings: CardSettings) {
@@ -267,7 +259,7 @@ function saveCardSettings(settings: CardSettings) {
 }
 
 const cardWidthMap = { small: '200px', medium: '240px', large: '280px' };
-const cardHeightMap = { small: '380px', medium: '420px', large: '460px' };
+const cardHeightMap = { small: 'auto', medium: 'auto', large: 'auto' };
 const statFontMap = { small: 'text-[10px]', medium: 'text-xs', large: 'text-sm' };
 const btnFontMap = { small: 'text-[10px]', medium: 'text-xs', large: 'text-sm' };
 const btnWeightMap = { normal: 'font-normal', medium: 'font-medium', bold: 'font-bold' };
@@ -470,7 +462,7 @@ export default function MyNovels() {
                   <h3 className="text-sm font-bold text-gray-900 mb-2 truncate">{novel.title}</h3>
                   <div className={`flex items-center justify-between text-gray-400 mb-3 ${statFontMap[cardSettings.statFontSize]}`}>
                     <span>{getNovelWordCount(novel.id)}字</span>
-                    <span>{novel.lastModifiedAt ? `修改：${novel.lastModifiedAt}` : `创建：${novel.createdAt}`}</span>
+                    <span>{novel.lastModifiedAt || novel.createdAt}</span>
                   </div>
                   {/* 按钮区域 - 纯文字弹性网格 */}
                   {(() => {
@@ -479,21 +471,25 @@ export default function MyNovels() {
                       '封面': (e: React.MouseEvent) => { e.stopPropagation(); e.preventDefault(); setSelectedNovelForCover(novel); setIsCoverModalOpen(true); },
                       '导出': (e: React.MouseEvent) => { e.stopPropagation(); e.preventDefault(); handleExport(novel.id); },
                       '删除': (e: React.MouseEvent) => { e.stopPropagation(); e.preventDefault(); openDeleteModal(novel.id); },
-                      '预留': (e: React.MouseEvent) => { e.stopPropagation(); e.preventDefault(); },
-                      '预留2': (e: React.MouseEvent) => { e.stopPropagation(); e.preventDefault(); },
-                      '预留3': (e: React.MouseEvent) => { e.stopPropagation(); e.preventDefault(); },
-                      '预留4': (e: React.MouseEvent) => { e.stopPropagation(); e.preventDefault(); },
-                      '预留5': (e: React.MouseEvent) => { e.stopPropagation(); e.preventDefault(); },
                     };
                     const maxCount = cardSettings.btnPerRow * cardSettings.btnRows;
-                    const ordered = cardSettings.btnOrder.slice(0, maxCount);
+                    // 生成带空位的显示布局，与设置面板保持一致
+                    const slots = cardSettings.btnOrder.slice(0, maxCount);
+                    while (slots.length < maxCount) slots.push('');
+
                     return (
-                      <div className="grid gap-1 mt-auto" style={{ gridTemplateColumns: `repeat(${cardSettings.btnPerRow}, 1fr)` }}>
-                        {ordered.map((label, bi) => {
+                      <div
+                        className="grid gap-1 mt-auto"
+                        style={{ gridTemplateColumns: `repeat(${cardSettings.btnPerRow}, 1fr)` }}
+                      >
+                        {slots.map((label, bi) => {
+                          if (!label) {
+                            // 空位：透明背景，不显示任何内容
+                            return <div key={bi} className="py-1.5" />;
+                          }
                           const color = cardSettings.btnColors[label] || 'gray';
-                          const isCursor = label.startsWith('预留') ? 'cursor-default' : '';
                           return (
-                            <button key={bi} onClick={allActions[label]} className={`py-1.5 rounded-lg transition-colors ${getBtnColorClasses(color as BtnColor)} hover:opacity-80 ${isCursor} ${btnFontMap[cardSettings.buttonFontSize]} ${btnWeightMap[cardSettings.buttonFontWeight]}`}>
+                            <button key={bi} onClick={allActions[label]} className={`py-1.5 rounded-lg transition-colors ${getBtnColorClasses(color as BtnColor)} hover:opacity-80 ${btnFontMap[cardSettings.buttonFontSize]} ${btnWeightMap[cardSettings.buttonFontWeight]}`}>
                               {label}
                             </button>
                           );

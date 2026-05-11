@@ -7,7 +7,7 @@ import { useEscToClose } from '@/hooks/useEscToClose';
 import { useBackdropClick } from '@/hooks/useBackdropClick';
 import { useNovelsContext } from '@/hooks/useNovels';
 
-type ImportMode = 'smart' | 'smart2' | 'local';
+type ImportMode = 'smart' | 'local';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -126,7 +126,7 @@ async function extractTextFromDocx(arrayBuffer: ArrayBuffer): Promise<string> {
 }
 
 export default function ImportModal({ isOpen, onClose, defaultType = 'novel' }: ImportModalProps) {
-  const { importNovelWithChapters, mergeNovelChapters, novels, getDefaultTitle } = useNovelsContext();
+  const { importNovelWithChapters, novels, getDefaultTitle } = useNovelsContext();
   const [importMode, setImportMode] = useState<ImportMode>('smart');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -158,7 +158,7 @@ export default function ImportModal({ isOpen, onClose, defaultType = 'novel' }: 
     setFileName(file.name);
     setParsedResult(null);
 
-    if (importMode === 'smart' || importMode === 'smart2') {
+    if (importMode === 'smart') {
       setIsParsing(true);
       try {
         let content = '';
@@ -230,28 +230,6 @@ export default function ImportModal({ isOpen, onClose, defaultType = 'novel' }: 
         },
         parsedResult.chapters,
       );
-    } else if (importMode === 'smart2' && parsedResult) {
-      // 智能导入2：合并到同名作品（跳过已有章节）
-      const finalTitle = parsedResult.bookName?.trim() || getDefaultTitle(workType);
-      const existingNovel = novels.find(
-        (n) => n.title.trim() === finalTitle && n.type === workType
-      );
-
-      if (existingNovel) {
-        mergeNovelChapters(existingNovel.id, parsedResult.chapters);
-      } else {
-        // 没有同名作品，退化为普通智能导入
-        importNovelWithChapters(
-          {
-            title: finalTitle,
-            cover: '',
-            type: workType,
-            synopsis: parsedResult.synopsis || undefined,
-            category: '未分类',
-          },
-          parsedResult.chapters,
-        );
-      }
     } else {
       // 本地导入
       importNovelWithChapters(
@@ -279,7 +257,7 @@ export default function ImportModal({ isOpen, onClose, defaultType = 'novel' }: 
   const canImport = !!selectedFile && (importMode === 'local' || !isParsing);
 
   // 智能模式才显示解析结果
-  const displayResult = parsedResult || ((importMode === 'smart' || importMode === 'smart2') && !selectedFile && !isParsing ? {
+  const displayResult = parsedResult || (importMode === 'smart' && !selectedFile && !isParsing ? {
     bookName: null, synopsis: null, chapters: [], totalWordCount: 0,
   } : null);
 
@@ -288,9 +266,6 @@ export default function ImportModal({ isOpen, onClose, defaultType = 'novel' }: 
     if (!parsedResult) return '开始导入';
     if (importMode === 'smart') {
       return `智能导入（创建新作品）`;
-    }
-    if (importMode === 'smart2') {
-      return `智能导入2（合并追加）`;
     }
     return '开始导入';
   };
@@ -311,7 +286,7 @@ export default function ImportModal({ isOpen, onClose, defaultType = 'novel' }: 
           </button>
         </div>
 
-        {/* 导入模式切换 — 三个Tab */}
+        {/* 导入模式切换 — 两个Tab */}
         <div className="flex border-b border-gray-100">
           <button
             onClick={() => handleModeChange('smart')}
@@ -323,17 +298,6 @@ export default function ImportModal({ isOpen, onClose, defaultType = 'novel' }: 
           >
             <Sparkles className="w-4 h-4" />
             智能导入
-          </button>
-          <button
-            onClick={() => handleModeChange('smart2')}
-            className={`flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors ${
-              importMode === 'smart2'
-                ? 'text-green-600 border-b-2 border-green-500 bg-green-50/50'
-                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-            }`}
-          >
-            <Sparkles className="w-4 h-4" />
-            智能导入2
           </button>
           <button
             onClick={() => handleModeChange('local')}
@@ -356,14 +320,6 @@ export default function ImportModal({ isOpen, onClose, defaultType = 'novel' }: 
               <Sparkles className="w-4 h-4 text-orange-500 mt-0.5 shrink-0" />
               <p className="text-xs text-orange-700 leading-relaxed">
                 <span className="font-bold">智能导入</span>：识别书名、简介和章节，<span className="font-bold">创建全新作品</span>。即使已有同名作品也会独立创建。
-              </p>
-            </div>
-          )}
-          {importMode === 'smart2' && (
-            <div className="p-3 bg-green-50 rounded-lg flex items-start gap-2">
-              <Sparkles className="w-4 h-4 text-green-500 mt-0.5 shrink-0" />
-              <p className="text-xs text-green-700 leading-relaxed">
-                <span className="font-bold">智能导入2</span>：识别书名、简介和章节，<span className="font-bold">合并到同名已有作品</span>。自动跳过已存在的章节，只追加新章节。同名作品不存在时自动创建新作品。
               </p>
             </div>
           )}
@@ -399,8 +355,8 @@ export default function ImportModal({ isOpen, onClose, defaultType = 'novel' }: 
             </p>
           </div>
 
-          {/* 智能导入/智能导入2：解析结果预览（含空状态） */}
-          {(importMode === 'smart' || importMode === 'smart2') && displayResult && (
+          {/* 智能导入：解析结果预览（含空状态） */}
+          {importMode === 'smart' && displayResult && (
             <div className="border border-orange-200 rounded-lg overflow-hidden">
               {/* 预览头部 */}
               <div className="flex items-center justify-between px-4 py-2.5 bg-orange-50 border-b border-orange-100">
@@ -474,7 +430,7 @@ export default function ImportModal({ isOpen, onClose, defaultType = 'novel' }: 
           )}
 
           {/* 解析中 */}
-          {(importMode === 'smart' || importMode === 'smart2') && isParsing && (
+          {importMode === 'smart' && isParsing && (
             <div className="flex items-center justify-center gap-2 py-6 text-gray-500">
               <Loader2 className="w-4 h-4 animate-spin" />
               <span className="text-sm">正在智能解析文件内容...</span>
@@ -494,9 +450,7 @@ export default function ImportModal({ isOpen, onClose, defaultType = 'novel' }: 
             onClick={handleImport}
             disabled={!canImport}
             className={`px-5 py-2 text-sm text-white rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium ${
-              importMode === 'smart2'
-                ? 'bg-green-500 hover:bg-green-600'
-                : importMode === 'local'
+              importMode === 'local'
                 ? 'bg-blue-500 hover:bg-blue-600'
                 : 'bg-orange-500 hover:bg-orange-600'
             }`}
