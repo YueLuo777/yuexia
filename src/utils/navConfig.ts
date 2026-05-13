@@ -61,7 +61,6 @@ export const DEFAULT_NAV_CONFIG: NavGroupConfig[] = [
     items: [
       { iconName: 'Database', label: '资料库', to: '/materials' },
       { iconName: 'Database', label: '提示词管理', to: '/prompts' },
-      { iconName: 'Tag', label: '标签专区', to: '/tag-zone' },
       { iconName: 'Database', label: '数据库设置', to: '/db-settings' },
     ],
   },
@@ -89,7 +88,7 @@ export const DEFAULT_NAV_CONFIG: NavGroupConfig[] = [
 ];
 
 // 修改 key 名称强制刷新（当默认导航结构变更时使用新 key）
-const NAV_CONFIG_KEY = 'nav_config_v36';
+const NAV_CONFIG_KEY = 'nav_config_v37';
 
 function isValidNavConfig(config: unknown): config is NavGroupConfig[] {
   if (!Array.isArray(config)) return false;

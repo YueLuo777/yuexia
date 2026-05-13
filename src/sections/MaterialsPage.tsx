@@ -300,7 +300,7 @@ export default function MaterialsPage() {
               className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-md transition-all ${
                 mainTab === 'plot' ? 'text-white bg-brand font-medium shadow-sm' : 'text-gray-500 hover:text-gray-700'
               }`}>
-              <Tag className="w-3.5 h-3.5" /> 剧情点
+              <Tag className="w-3.5 h-3.5" /> 标签
             </button>
           </div>
 
