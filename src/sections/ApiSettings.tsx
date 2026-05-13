@@ -24,13 +24,49 @@ export interface ApiSettingsData {
 
 const STORAGE_KEY = 'api_settings_v2';
 
+/* ─── 默认模型配置 ─── */
+const DEFAULT_MODELS: ApiModelConfig[] = [
+  {
+    id: 'deepseek-v4-pro',
+    name: 'DeepSeek V4 Pro',
+    enabled: true,
+    locked: false,
+    connectionStatus: 'untested',
+    apiKey: 'sk-c606781b651147f299e701f033317933',
+    baseUrl: 'https://api.deepseek.com',
+    model: 'deepseek-v4-pro',
+    description: 'DeepSeek V4 Pro - 高质量长文本处理',
+  },
+  {
+    id: 'deepseek-v4-flash',
+    name: 'DeepSeek V4 Flash',
+    enabled: true,
+    locked: false,
+    connectionStatus: 'untested',
+    apiKey: 'sk-c606781b651147f299e701f033317933',
+    baseUrl: 'https://api.deepseek.com',
+    model: 'deepseek-v4-flash',
+    description: 'DeepSeek V4 Flash - 快速响应',
+  },
+];
+
 /* ─── 加载/保存工具 ─── */
 function loadSettings(): ApiSettingsData {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) return JSON.parse(raw) as ApiSettingsData;
+    if (raw) {
+      const parsed = JSON.parse(raw) as ApiSettingsData;
+      // 如果已有模型但没有默认模型，补充进去
+      if (parsed.models && parsed.models.length > 0) {
+        const hasV4Pro = parsed.models.some(m => m.id === 'deepseek-v4-pro');
+        const hasV4Flash = parsed.models.some(m => m.id === 'deepseek-v4-flash');
+        if (!hasV4Pro) parsed.models.push(DEFAULT_MODELS[0]);
+        if (!hasV4Flash) parsed.models.push(DEFAULT_MODELS[1]);
+        return parsed;
+      }
+    }
   } catch { /* ignore */ }
-  return { models: [] };
+  return { models: [...DEFAULT_MODELS] };
 }
 
 function saveSettings(data: ApiSettingsData) {
