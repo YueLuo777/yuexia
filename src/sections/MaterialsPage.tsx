@@ -146,8 +146,8 @@ export default function MaterialsPage() {
   const { materials, addMaterial, updateMaterial, deleteMaterial, searchMaterials, stats } = useMaterials();
   const { tags, tagsByCategory, categories, importTags } = useTags();
 
-  // Tab 状态: 'novel' | 'script' | 'plot'
-  const [mainTab, setMainTab] = useState<'novel' | 'script' | 'plot'>('novel');
+  // Tab 状态: 'novel' | 'script' | 'all' | 'plot'
+  const [mainTab, setMainTab] = useState<'novel' | 'script' | 'all' | 'plot'>('novel');
 
   // 资料相关状态
   const [selectedNovelId, setSelectedNovelId] = useState<number | null>(null);
@@ -169,13 +169,14 @@ export default function MaterialsPage() {
   const [isTagImportOpen, setIsTagImportOpen] = useState(false);
 
   // 资料数据过滤
-  const activeType = mainTab === 'plot' ? 'novel' : mainTab;
+  const activeType: 'novel' | 'script' | 'all' = mainTab === 'plot' ? 'all' : mainTab;
   const novelGroups = useMemo(() => {
-    return novels.filter((n) => n.type === activeType).map((n) => ({ id: n.id, title: n.title }));
+    const filtered = activeType === 'all' ? novels : novels.filter((n) => n.type === activeType);
+    return filtered.map((n) => ({ id: n.id, title: n.title, type: n.type as 'novel' | 'script' }));
   }, [novels, activeType]);
 
   const filteredMaterials = useMemo(() => {
-    return searchMaterials(searchQuery, activeType, selectedNovelId);
+    return searchMaterials(searchQuery, activeType === 'all' ? 'all' : activeType, selectedNovelId);
   }, [searchMaterials, searchQuery, activeType, selectedNovelId]);
 
   // 标签筛选后的剧情点（从资料中筛选含标签的）
@@ -223,7 +224,9 @@ export default function MaterialsPage() {
   }, [addMaterial]);
 
   const novelListForSelect = useMemo(() => {
-    return novels.filter((n) => n.type === activeType).map((n) => ({ id: n.id, title: n.title, type: n.type }));
+    // 编辑资料时，如果当前是总资料库或剧情点，默认用小说类型
+    const typeFilter = activeType === 'all' ? 'novel' : activeType;
+    return novels.filter((n) => n.type === typeFilter).map((n) => ({ id: n.id, title: n.title, type: n.type }));
   }, [novels, activeType]);
 
   // 剧情点卡片组件
@@ -287,6 +290,12 @@ export default function MaterialsPage() {
               }`}>
               <BookOpen className="w-3.5 h-3.5" /> 剧本资料
             </button>
+            <button onClick={() => handleMainTabChange('all')}
+              className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-md transition-all ${
+                mainTab === 'all' ? 'text-white bg-brand font-medium shadow-sm' : 'text-gray-500 hover:text-gray-700'
+              }`}>
+              <BookOpen className="w-3.5 h-3.5" /> 总资料库
+            </button>
             <button onClick={() => handleMainTabChange('plot')}
               className={`flex items-center gap-1.5 px-4 py-2 text-sm rounded-md transition-all ${
                 mainTab === 'plot' ? 'text-white bg-brand font-medium shadow-sm' : 'text-gray-500 hover:text-gray-700'
@@ -295,22 +304,20 @@ export default function MaterialsPage() {
             </button>
           </div>
 
-          {/* 搜索 */}
+          {/* 搜索 + 智能导入（在资料库模式下显示） */}
           {mainTab !== 'plot' && (
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
-              <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="搜索资料..."
-                className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-brand w-[200px]" />
-            </div>
-          )}
-
-          {/* 智能导入 */}
-          {mainTab !== 'plot' && (
-            <button onClick={() => setIsSmartImportOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-amber-500 rounded-lg hover:bg-amber-600 transition-colors">
-              <Sparkles className="w-4 h-4" /> 智能导入
-            </button>
+            <>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300" />
+                <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="搜索资料..."
+                  className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-brand w-[200px]" />
+              </div>
+              <button onClick={() => setIsSmartImportOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-amber-500 rounded-lg hover:bg-amber-600 transition-colors">
+                <Sparkles className="w-4 h-4" /> 智能导入
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -394,10 +401,12 @@ export default function MaterialsPage() {
             </div>
           </aside>
         ) : (
-          /* 小说/剧本模式：作品分类 */
+          /* 小说/剧本/总资料库模式：作品分类 */
           <aside className="w-[200px] flex flex-col bg-white border-r border-gray-200 shrink-0">
             <div className="px-4 py-3 border-b border-gray-100">
-              <h3 className="text-sm font-bold text-gray-700">作品分类</h3>
+              <h3 className="text-sm font-bold text-gray-700">
+                {activeType === 'all' ? '全部作品' : activeType === 'novel' ? '小说作品' : '剧本作品'}
+              </h3>
             </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-1">
               <button onClick={() => setSelectedNovelId(null)}
@@ -406,18 +415,42 @@ export default function MaterialsPage() {
                 }`}>
                 <span className="truncate">全部资料</span>
                 <span className={`text-xs ${selectedNovelId === null ? 'text-white/70' : 'text-gray-400'}`}>
-                  {searchMaterials('', activeType, null).length}
+                  {searchMaterials(searchQuery, activeType === 'all' ? 'all' : activeType, null).length}
                 </span>
               </button>
               <div className="h-px bg-gray-100 my-1" />
-              {novelGroups.map((group) => (
+              {/* 总资料库模式下显示分类标题 */}
+              {activeType === 'all' && novelGroups.filter(g => g.type === 'novel').length > 0 && (
+                <div className="px-3 py-1 text-[10px] text-gray-400 font-medium uppercase tracking-wider">小说</div>
+              )}
+              {novelGroups.filter(g => g.type === 'novel').map((group) => (
                 <button key={group.id} onClick={() => setSelectedNovelId(group.id)}
                   className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left text-sm transition-colors ${
                     selectedNovelId === group.id ? 'text-white bg-brand font-medium' : 'text-gray-600 hover:bg-gray-50'
                   }`}>
-                  <span className="truncate" style={{ maxWidth: '140px' }}>{group.title}</span>
+                  <span className="flex items-center gap-1.5 truncate">
+                    <Book className="w-3 h-3 shrink-0 opacity-50" />
+                    <span className="truncate" style={{ maxWidth: '130px' }}>{group.title}</span>
+                  </span>
                   <span className={`text-xs ${selectedNovelId === group.id ? 'text-white/70' : 'text-gray-400'}`}>
-                    {materials.filter((m) => m.type === activeType && m.novelId === group.id).length}
+                    {materials.filter((m) => m.novelId === group.id).length}
+                  </span>
+                </button>
+              ))}
+              {activeType === 'all' && novelGroups.filter(g => g.type === 'script').length > 0 && (
+                <div className="px-3 py-1 text-[10px] text-gray-400 font-medium uppercase tracking-wider mt-1">剧本</div>
+              )}
+              {novelGroups.filter(g => g.type === 'script').map((group) => (
+                <button key={group.id} onClick={() => setSelectedNovelId(group.id)}
+                  className={`w-full flex items-center justify-between px-3 py-2 rounded-md text-left text-sm transition-colors ${
+                    selectedNovelId === group.id ? 'text-white bg-brand font-medium' : 'text-gray-600 hover:bg-gray-50'
+                  }`}>
+                  <span className="flex items-center gap-1.5 truncate">
+                    <BookOpen className="w-3 h-3 shrink-0 opacity-50" />
+                    <span className="truncate" style={{ maxWidth: '130px' }}>{group.title}</span>
+                  </span>
+                  <span className={`text-xs ${selectedNovelId === group.id ? 'text-white/70' : 'text-gray-400'}`}>
+                    {materials.filter((m) => m.novelId === group.id).length}
                   </span>
                 </button>
               ))}
@@ -520,7 +553,7 @@ export default function MaterialsPage() {
 
       {/* ═══ 弹窗 ═══ */}
       <MaterialEditModal isOpen={isEditOpen} onClose={() => { setIsEditOpen(false); setEditTarget(null); }}
-        onSave={handleSave} novels={novelListForSelect} defaultType={activeType} editMaterial={editTarget} />
+        onSave={handleSave} novels={novelListForSelect} defaultType={activeType === 'all' ? 'novel' : activeType} editMaterial={editTarget} />
       <DeleteConfirmModal isOpen={deleteTargetId !== null} onClose={() => setDeleteTargetId(null)} onConfirm={handleDelete} />
       <SmartImportModal isOpen={isSmartImportOpen} onClose={() => setIsSmartImportOpen(false)}
         onImport={handleSmartImport} novels={novels.map(n => ({ id: n.id, title: n.title, type: n.type as 'novel' | 'script' }))} />
