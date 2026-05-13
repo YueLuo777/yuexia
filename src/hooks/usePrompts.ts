@@ -24,15 +24,24 @@ const RECYCLE_BIN_KEY = 'prompt_recycle';
 const FAVORITES_KEY = 'prompt_favorites';
 const CATEGORIES_KEY = 'prompt_categories';
 
+const DEFAULT_CATEGORIES = ['正文', '大纲', '细纲', '审核', '提炼', '更新', '未分类'];
+
 function loadCategories(): string[] {
   try {
     const raw = localStorage.getItem(CATEGORIES_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // 如果已有分类，补充新增的系统分类
+        const merged = [...parsed];
+        for (const cat of DEFAULT_CATEGORIES) {
+          if (!merged.includes(cat)) merged.push(cat);
+        }
+        return merged;
+      }
     }
   } catch { /* ignore */ }
-  return ['未分类'];
+  return [...DEFAULT_CATEGORIES];
 }
 
 function saveCategories(list: string[]) {
