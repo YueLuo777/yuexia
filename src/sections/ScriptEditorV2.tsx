@@ -348,7 +348,7 @@ function ScriptSidebar({
                     }`}
                   >
                     <span className="flex-1 text-left truncate">
-                      {vol.name === '集纲' ? ch.title : `第${ch.serialNumber}集${ch.title ? ` ${ch.title}` : ''}`}
+                      {vol.name === '集纲' ? `${ch.title || `第${ch.serialNumber}集`}` : `第${ch.serialNumber}集${ch.title ? ` ${ch.title}` : ''}`}
                     </span>
                     <span className={`text-[10px] shrink-0 ml-1 ${selectedChapterId === ch.id ? 'text-orange-400' : 'text-gray-400'}`}>
                       {ch.wordCount || 0}字
