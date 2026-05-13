@@ -3,6 +3,7 @@ import {
   Server, Bot, Eye, EyeOff, Trash2,
   CheckCircle, Plus, X, Copy, Pencil, Power, PowerOff, Lock, Unlock, Wifi,
 } from 'lucide-react';
+import { addRecord } from '@/hooks/useCallRecords';
 // Layout removed - local app mode
 
 /* ─── 数据类型 ─── */
@@ -208,6 +209,11 @@ export default function ApiSettings() {
       ...prev,
       models: prev.models.map((m) => (m.id === model.id ? { ...m, connectionStatus: 'testing' } : m)),
     }));
+
+    const startTime = performance.now();
+    let status: 'success' | 'failed' = 'failed';
+    let latencyMs = 0;
+
     try {
       const res = await fetch(`${model.baseUrl}/models`, {
         method: 'GET',
@@ -216,13 +222,17 @@ export default function ApiSettings() {
           'Content-Type': 'application/json',
         },
       });
+      latencyMs = Math.round(performance.now() - startTime);
+
       if (res.ok) {
+        status = 'success';
         setSettings((prev) => ({
           ...prev,
           models: prev.models.map((m) => (m.id === model.id ? { ...m, connectionStatus: 'connected' } : m)),
         }));
-        showToast('连接成功');
+        showToast(`连接成功 · ${latencyMs}ms`);
       } else {
+        status = 'failed';
         setSettings((prev) => ({
           ...prev,
           models: prev.models.map((m) => (m.id === model.id ? { ...m, connectionStatus: 'failed' } : m)),
@@ -230,12 +240,25 @@ export default function ApiSettings() {
         showToast('连接失败');
       }
     } catch {
+      latencyMs = Math.round(performance.now() - startTime);
+      status = 'failed';
       setSettings((prev) => ({
         ...prev,
         models: prev.models.map((m) => (m.id === model.id ? { ...m, connectionStatus: 'failed' } : m)),
       }));
       showToast('连接失败');
     }
+
+    // 记录调用数据
+    addRecord({
+      modelId: model.id,
+      modelName: model.name,
+      type: 'api_test',
+      status,
+      latencyMs,
+      endpoint: `${model.baseUrl}/models`,
+    });
+    window.dispatchEvent(new CustomEvent('call_records_updated'));
   };
 
   const toggleLock = (id: string) => {

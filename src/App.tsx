@@ -13,6 +13,7 @@ import Test1Page from './sections/Test1Page';
 import IdeaGenerator from './sections/IdeaGenerator';
 import OutlineGenerator from './sections/OutlineGenerator';
 import IdeaLibrary from './sections/IdeaLibrary';
+import CallDataPage from './sections/CallDataPage';
 import Dashboard from './pages/Dashboard';
 
 function App() {
@@ -35,6 +36,7 @@ function App() {
           <Route path="/materials" element={<MaterialsPage />} />
           <Route path="/model-manage" element={<ApiSettings />} />
           <Route path="/db-settings" element={<DbSettings />} />
+          <Route path="/call-data" element={<CallDataPage />} />
           <Route path="/button-test" element={<ButtonTestPage />} />
           <Route path="/test1" element={<Test1Page />} />
           <Route path="/idea-generator" element={<IdeaGenerator />} />

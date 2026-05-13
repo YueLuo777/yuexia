@@ -6,12 +6,13 @@
 import {
   User, LayoutGrid, BookOpen, FileText, Film, Database, Users,
   Settings, FolderOpen, FlaskConical, Lightbulb, ListTree, Library,
+  Activity,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // ── icon 名称到组件的映射 ──
 export const iconMap: Record<string, LucideIcon> = {
-  User, LayoutGrid, BookOpen, FileText, Film, Database, Users, Settings, FolderOpen, FlaskConical, Lightbulb, ListTree, Library,
+  User, LayoutGrid, BookOpen, FileText, Film, Database, Users, Settings, FolderOpen, FlaskConical, Lightbulb, ListTree, Library, Activity,
 };
 
 export function getIconByName(name: string): LucideIcon {
@@ -72,6 +73,7 @@ export const DEFAULT_NAV_CONFIG: NavGroupConfig[] = [
     iconName: 'FlaskConical',
     hidden: false,
     items: [
+      { iconName: 'Activity', label: '调用数据', to: '/call-data' },
       { iconName: 'Settings', label: '按钮颜色', to: '/button-test' },
       { iconName: 'Settings', label: '测试1', to: '/test1' },
     ],
@@ -80,7 +82,7 @@ export const DEFAULT_NAV_CONFIG: NavGroupConfig[] = [
 ];
 
 // 修改 key 名称强制刷新（当默认导航结构变更时使用新 key）
-const NAV_CONFIG_KEY = 'nav_config_v34';
+const NAV_CONFIG_KEY = 'nav_config_v35';
 
 function isValidNavConfig(config: unknown): config is NavGroupConfig[] {
   if (!Array.isArray(config)) return false;
