@@ -503,9 +503,7 @@ export default function MyNovels() {
           </div>
         )}
 
-        <div className="mt-8 py-4 text-center text-xs text-gray-400 border-t border-gray-100">
-          <p>© 2025 月下写作</p>
-        </div>
+        <div className="mt-8 py-4 border-t border-gray-100" />
 
         <CoverModal isOpen={isCoverModalOpen} onClose={() => setIsCoverModalOpen(false)} novelTitle={selectedNovelForCover?.title || ''} onCoverSelected={(dataUrl) => {
           if (selectedNovelForCover) {
