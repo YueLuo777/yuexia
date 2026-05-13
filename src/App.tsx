@@ -14,6 +14,7 @@ import IdeaGenerator from './sections/IdeaGenerator';
 import OutlineGenerator from './sections/OutlineGenerator';
 import IdeaLibrary from './sections/IdeaLibrary';
 import CallDataPage from './sections/CallDataPage';
+import TagZone from './sections/TagZone';
 import Dashboard from './pages/Dashboard';
 
 function App() {
@@ -42,6 +43,7 @@ function App() {
           <Route path="/idea-generator" element={<IdeaGenerator />} />
           <Route path="/outline-generator" element={<OutlineGenerator />} />
           <Route path="/idea-library" element={<IdeaLibrary />} />
+          <Route path="/tag-zone" element={<TagZone />} />
         </Route>
 
         {/* 未匹配路由重定向 */}
