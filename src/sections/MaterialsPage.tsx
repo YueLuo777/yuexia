@@ -1,10 +1,12 @@
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import {
   Plus, Search, X, Edit3, Trash2, BookOpen, Book, AlertTriangle, Pencil,
+  Sparkles,
 } from 'lucide-react';
 import { useMaterials } from '@/hooks/useMaterials';
 import { useNovelsContext } from '@/hooks/useNovels';
 import type { Material } from '@/hooks/useMaterials';
+import SmartImportModal from './SmartImportModal';
 // Layout removed - local app mode
 
 /* ─── 辅助函数：从 content 解析标记 ─── */
@@ -167,6 +169,7 @@ export default function MaterialsPage() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Material | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [isSmartImportOpen, setIsSmartImportOpen] = useState(false);
 
   // 从作品列表（novels）读取所有作品，而非仅从已有资料中过滤
   const novelGroups = useMemo(() => {
@@ -183,6 +186,12 @@ export default function MaterialsPage() {
     setEditTarget(null);
     setIsEditOpen(true);
   }, []);
+
+  const handleSmartImport = useCallback((items: { title: string; content: string; novelId: number; novelTitle: string; type: 'novel' | 'script' }[]) => {
+    items.forEach(item => {
+      addMaterial(item);
+    });
+  }, [addMaterial]);
 
   const handleEdit = useCallback((m: Material) => {
     setEditTarget(m);
@@ -249,10 +258,10 @@ export default function MaterialsPage() {
                 placeholder="搜索资料..."
                 className="pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-brand w-[200px]" />
             </div>
-            {/* 新增 */}
-            <button onClick={handleAdd}
-              className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors">
-              <Plus className="w-4 h-4" /> 新增资料
+            {/* 智能导入 */}
+            <button onClick={() => setIsSmartImportOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 text-sm text-white bg-amber-500 rounded-lg hover:bg-amber-600 transition-colors">
+              <Sparkles className="w-4 h-4" /> 智能导入
             </button>
           </div>
         </div>
@@ -307,12 +316,12 @@ export default function MaterialsPage() {
                   {searchQuery ? '未找到匹配的资料' : `暂无${activeType === 'novel' ? '小说' : '剧本'}资料`}
                 </p>
                 {!searchQuery && (
-                  <p className="text-xs text-gray-400 mb-4">点击右上角"新增资料"开始添加</p>
+                  <p className="text-xs text-gray-400 mb-4">点击右上角"智能导入"开始添加</p>
                 )}
                 {!searchQuery && (
-                  <button onClick={handleAdd}
-                    className="flex items-center gap-1.5 px-4 py-2 text-sm text-brand border border-brand rounded-md hover:bg-brand-light transition-colors">
-                    <Plus className="w-4 h-4" /> 新增资料
+                  <button onClick={() => setIsSmartImportOpen(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 text-sm text-amber-600 border border-amber-400 rounded-md hover:bg-amber-50 transition-colors">
+                    <Sparkles className="w-4 h-4" /> 智能导入
                   </button>
                 )}
               </div>
@@ -372,6 +381,12 @@ export default function MaterialsPage() {
         onSave={handleSave} novels={novelListForSelect} defaultType={activeType} editMaterial={editTarget} />
       <DeleteConfirmModal isOpen={deleteTargetId !== null} onClose={() => setDeleteTargetId(null)}
         onConfirm={handleDelete} />
+      <SmartImportModal
+        isOpen={isSmartImportOpen}
+        onClose={() => setIsSmartImportOpen(false)}
+        onImport={handleSmartImport}
+        novels={novels.map(n => ({ id: n.id, title: n.title, type: n.type as 'novel' | 'script' }))}
+      />
     </div>
   );
 }
