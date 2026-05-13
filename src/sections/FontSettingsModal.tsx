@@ -13,7 +13,7 @@ export interface FontSettings {
 const DEFAULT_SETTINGS: FontSettings = {
   fontFamily: 'PingFang SC, Microsoft YaHei, sans-serif',
   fontColor: '#374151',
-  fontSize: 30,
+  fontSize: 22,
   lineHeight: 1.8,
 };
 

@@ -337,7 +337,7 @@ export default function Sidebar({ onSelectChapter, onTogglePublished, showPublis
                         ? 'bg-orange-50 border-l-[3px] border-orange-400'
                         : 'hover:bg-gray-50 border-l-[3px] border-transparent'
                     }`}>
-                    <span className={`flex-1 text-sm font-medium truncate whitespace-nowrap overflow-hidden text-ellipsis ${chapter.isSelected ? 'text-orange-600' : 'text-gray-700'}`}>{chapter.title || `第${chapter.serialNumber}${chapterUnit}`}</span>
+                    <span className={`flex-1 text-sm font-medium truncate whitespace-nowrap overflow-hidden text-ellipsis ${chapter.isSelected ? 'text-orange-600' : 'text-gray-700'}`}>{`第${chapter.serialNumber}${chapterUnit}`}{chapter.title ? ` ${chapter.title}` : ''}</span>
                     <span className="text-xs text-gray-400 shrink-0 group-hover:opacity-0 transition-opacity">{wordCountTick >= 0 && getChapterWordCount(chapter.id)}</span>
                     {/* 发布按钮 — 悬浮时替换字数位置 */}
                     <button
