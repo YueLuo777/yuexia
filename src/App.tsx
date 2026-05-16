@@ -9,7 +9,6 @@ import DbSettings from './sections/DbSettings';
 import ScriptEditorV2 from './sections/ScriptEditorV2';
 import MyNovels from './sections/MyNovels';
 import ButtonTestPage from './sections/ButtonTestPage';
-import Test1Page from './sections/Test1Page';
 import IdeaGenerator from './sections/IdeaGenerator';
 import OutlineGenerator from './sections/OutlineGenerator';
 import IdeaLibrary from './sections/IdeaLibrary';
@@ -39,7 +38,6 @@ function App() {
           <Route path="/db-settings" element={<DbSettings />} />
           <Route path="/call-data" element={<CallDataPage />} />
           <Route path="/button-test" element={<ButtonTestPage />} />
-          <Route path="/test1" element={<Test1Page />} />
           <Route path="/idea-generator" element={<IdeaGenerator />} />
           <Route path="/outline-generator" element={<OutlineGenerator />} />
           <Route path="/idea-library" element={<IdeaLibrary />} />

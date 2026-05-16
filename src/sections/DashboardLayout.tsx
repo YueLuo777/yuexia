@@ -62,7 +62,7 @@ export default function DashboardLayout() {
       {/* 主体区域 */}
       <div className="flex flex-1 overflow-hidden">
         {/* 左侧边栏 — navConfig 动态渲染 */}
-        <aside ref={sidebarRef} className="w-[180px] flex flex-col bg-white border-r border-gray-200 shrink-0 overflow-y-auto">
+        <aside ref={sidebarRef} className="w-[180px] flex flex-col bg-white border-r border-gray-200 shrink-0 overflow-y-auto overflow-x-hidden">
           {navConfig.filter((group) => !group.hidden).map((group, gi) => {
             const GroupIcon = getIconByName(group.iconName);
             const isCollapsed = collapsedSections[group.title] || false;

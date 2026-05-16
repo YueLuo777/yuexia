@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useNovelsContext } from '@/hooks/useNovels';
 import { useMaterials } from '@/hooks/useMaterials';
+import { useTags } from '@/hooks/useTags';
 import {
   Sparkles, X, ChevronDown, Loader2, BookOpen, FileText, AlertCircle,
-  FileCode2, Lightbulb, Pencil, Trash2,
+  FileCode2, Lightbulb, Pencil, Trash2, Tag, ChevronRight, Check, Plus,
 } from 'lucide-react';
 
 interface ExtractPlotModalProps {
@@ -25,11 +26,13 @@ interface ExtractResult {
   chapterId: number;
   chapterTitle: string;
   plotText: string;
+  tags?: string[];
 }
 
 export default function ExtractPlotModal({ isOpen, onClose }: ExtractPlotModalProps) {
   const { novels, currentNovelId, volumesMap } = useNovelsContext();
   const { addMaterial } = useMaterials();
+  const { tags, tagsByCategory, categories } = useTags();
 
   const currentNovel = novels.find((n) => n.id === currentNovelId);
   const volumes = currentNovelId ? (volumesMap[currentNovelId] || []) : [];
@@ -51,11 +54,29 @@ export default function ExtractPlotModal({ isOpen, onClose }: ExtractPlotModalPr
   // 章节选择
   const [selectedChapterIds, setSelectedChapterIds] = useState<Set<number>>(new Set());
 
+  // 标签选择
+  const [selectedTags, setSelectedTags] = useState<Set<string>>(new Set());
+  const [tagSearch, setTagSearch] = useState('');
+  const [expandedTagCats, setExpandedTagCats] = useState<Record<string, boolean>>({
+    '主角设定与开局逻辑': false,
+    '剧情推进与爽点逻辑': false,
+    '社交交互与情感反馈': false,
+    '场景、结构与氛围锚点': false,
+  });
+
   // 提炼状态
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractedResults, setExtractedResults] = useState<ExtractResult[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
+
+  // AI 标签分类
+  const [isAiTagging, setIsAiTagging] = useState(false);
+  const [aiTagAssignments, setAiTagAssignments] = useState<Record<number, string[]>>({});
+  const [pendingSaveResults, setPendingSaveResults] = useState<ExtractResult[]>([]);
+
+  // 用户确认标签的弹窗
+  const [showTagConfirm, setShowTagConfirm] = useState(false);
 
   const [showMaterials, setShowMaterials] = useState(false);
 
@@ -188,29 +209,6 @@ export default function ExtractPlotModal({ isOpen, onClose }: ExtractPlotModalPr
           plotText = await callAI(chapterTitle, content);
         }
 
-        const bookTitle = currentNovel?.title || '未命名作品';
-
-        // 如果无可提炼内容，跳过存储
-        if (!plotText || plotText === '（该章节暂无内容，无法提炼）' || plotText.startsWith('提炼失败')) {
-          results.push({ chapterId: ch.id, chapterTitle, plotText });
-          setExtractedResults([...results]);
-          continue;
-        }
-
-        // 使用 AI 返回的原始内容（不添加【摘要】前缀，避免重复），追加出处和评分
-        const contentToStore = `${plotText}\n\n【出处】《${bookTitle}》-第${ch.serialNumber}章\n【评分】80分`;
-
-        addMaterial({
-          novelId: currentNovelId || 0,
-          novelTitle: bookTitle,
-          type: 'novel',
-          title: `${bookTitle} · ${chapterTitle} — 剧情提炼`,
-          content: contentToStore,
-          chapterName: ch.title || '',
-          chapterSerial: ch.serialNumber,
-          rating: 80,
-        });
-
         results.push({ chapterId: ch.id, chapterTitle, plotText });
         setExtractedResults([...results]);
       } catch (err: any) {
@@ -224,10 +222,178 @@ export default function ExtractPlotModal({ isOpen, onClose }: ExtractPlotModalPr
 
     setIsExtracting(false);
     setProgress(0);
+
+    // ─── 提炼完成，进入AI标签分类阶段 ───
+    const validResults = results.filter(r => r.plotText && !r.plotText.startsWith('提炼失败') && r.plotText !== '（该章节暂无内容，无法提炼）');
+    if (validResults.length > 0) {
+      await handleAiTagging(validResults);
+    }
+  };
+
+  // ─── AI 自动标签分类 ───
+  const handleAiTagging = async (results: ExtractResult[]) => {
+    setIsAiTagging(true);
+    setPendingSaveResults(results);
+
+    try {
+      const model = models.find((m) => m.id === selectedModelId);
+      if (!model || !model.baseUrl || !model.apiKey) {
+        // AI分类不可用，直接让用户手动选择
+        const defaultTags = Array.from(selectedTags);
+        const fallback: Record<number, string[]> = {};
+        for (const r of results) {
+          fallback[r.chapterId] = defaultTags.length > 0 ? [...defaultTags] : [];
+        }
+        setAiTagAssignments(fallback);
+        setShowTagConfirm(true);
+        setIsAiTagging(false);
+        return;
+      }
+
+      // 构建所有可用标签列表
+      const allTagsList = tags.map(t => `${t.name}${t.description ? `(${t.description.slice(0, 20)})` : ''}`).join('、');
+
+      const promptContent = `你是一个网文剧情分类专家。请分析以下提炼的剧情要点，为每个剧情点推荐最合适的标签。
+
+可用标签列表（共${tags.length}个）：
+${allTagsList}
+
+规则：
+1. 每个剧情点至少选择1个标签，最多选择10个标签
+2. 选择最贴合剧情内容的标签，宁缺毋滥
+3. 如果某个剧情点与多个标签都相关，可以选多个（不超过10个）
+4. 如果某个剧情点无法匹配任何标签，返回"无匹配"
+5. 只返回标签名，不要返回描述或其他内容
+
+请为以下每个剧情点推荐标签，格式如下：
+[剧情序号] 标签1,标签2,标签3
+
+剧情要点：`;
+
+      const plotSummaries = results.map((r, idx) => `${idx + 1}. ${r.chapterTitle}：${r.plotText.slice(0, 200)}`).join('\n');
+
+      const messages = [
+        { role: 'system', content: promptContent },
+        { role: 'user', content: plotSummaries },
+      ];
+
+      const baseUrl = model.baseUrl.replace(/\/+$/, '');
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${model.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: model.id,
+          messages,
+          temperature: 0.3,
+          max_tokens: 2000,
+          stream: false,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error('AI标签分类请求失败');
+      }
+
+      const data = await res.json();
+      const aiResponse = (data.choices?.[0]?.message?.content || '').trim();
+
+      // 解析AI返回的标签
+      const assignments: Record<number, string[]> = {};
+
+      // 先初始化为手动选择的标签
+      const defaultTags = Array.from(selectedTags);
+      for (const r of results) {
+        assignments[r.chapterId] = defaultTags.length > 0 ? [...defaultTags] : [];
+      }
+
+      // 解析AI返回
+      const lines = aiResponse.split('\n').filter(l => l.trim());
+      for (let i = 0; i < results.length && i < lines.length; i++) {
+        const line = lines[i];
+        // 匹配 [数字] 标签列表 或 数字. 标签列表
+        const tagMatch = line.match(/^\[?(\d+)\]?[.\s]*(.+)$/);
+        if (tagMatch) {
+          const tagStr = tagMatch[2].trim();
+          if (tagStr !== '无匹配') {
+            // 分割标签，去重，最多10个
+            const aiTags = tagStr.split(/[,，、]/).map(t => t.trim()).filter(t => t.length > 0);
+            // 只保留实际存在的标签名
+            const validTags = aiTags.filter(tagName => tags.some(t => t.name === tagName)).slice(0, 10);
+            if (validTags.length > 0) {
+              assignments[results[i].chapterId] = validTags;
+            }
+          }
+        }
+      }
+
+      setAiTagAssignments(assignments);
+      setShowTagConfirm(true);
+    } catch (err: any) {
+      console.error('AI标签分类失败:', err);
+      // 失败时使用手动选择的标签
+      const defaultTags = Array.from(selectedTags);
+      const fallback: Record<number, string[]> = {};
+      for (const r of results) {
+        fallback[r.chapterId] = defaultTags.length > 0 ? [...defaultTags] : [];
+      }
+      setAiTagAssignments(fallback);
+      setShowTagConfirm(true);
+    }
+
+    setIsAiTagging(false);
+  };
+
+  // ─── 用户确认标签后保存 ───
+  const handleConfirmSave = () => {
+    const bookTitle = currentNovel?.title || '未命名作品';
+
+    for (const result of pendingSaveResults) {
+      const resultTags = aiTagAssignments[result.chapterId] || [];
+      const ch = allChapters.find(c => c.id === result.chapterId);
+      if (!ch) continue;
+
+      const chapterTitle = `第${ch.serialNumber}章${ch.title ? ' ' + ch.title : ''}`;
+      const tagsLine = resultTags.length > 0 ? `\n【标签】${resultTags.join('、')}` : '';
+      const contentToStore = `${result.plotText}\n\n【出处】《${bookTitle}》-第${ch.serialNumber}章\n【评分】80分${tagsLine}`;
+
+      addMaterial({
+        novelId: currentNovelId || 0,
+        novelTitle: bookTitle,
+        type: 'novel',
+        title: `${bookTitle} · ${chapterTitle} — 剧情提炼`,
+        content: contentToStore,
+        chapterName: ch.title || '',
+        chapterSerial: ch.serialNumber,
+        rating: 80,
+      });
+    }
+
+    setShowTagConfirm(false);
+    setPendingSaveResults([]);
+    setAiTagAssignments({});
+  };
+
+  // ─── 切换标签 ───
+  const toggleResultTag = (chapterId: number, tagName: string) => {
+    setAiTagAssignments(prev => {
+      const current = prev[chapterId] || [];
+      if (current.includes(tagName)) {
+        // 至少保留1个
+        if (current.length <= 1) return prev;
+        return { ...prev, [chapterId]: current.filter(t => t !== tagName) };
+      } else {
+        // 最多10个
+        if (current.length >= 10) return prev;
+        return { ...prev, [chapterId]: [...current, tagName] };
+      }
+    });
   };
 
   // 右侧显示模式
-  const rightMode = isExtracting || extractedResults.length > 0 ? 'result' : 'preview';
+  const rightMode = isExtracting || isAiTagging || extractedResults.length > 0 ? 'result' : 'preview';
 
   if (!isOpen) return null;
 
@@ -322,6 +488,93 @@ export default function ExtractPlotModal({ isOpen, onClose }: ExtractPlotModalPr
               <span className="text-sm font-semibold text-sky-700">{currentNovel?.title || '未选择作品'}</span>
             </div>
 
+            {/* ═══ 标签选择 ═══ */}
+            <div className="shrink-0">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5">
+                  <Tag className="w-3.5 h-3.5 text-violet-500" />
+                  <label className="text-sm font-medium text-gray-700">标签标注</label>
+                </div>
+                {selectedTags.size > 0 && (
+                  <span className="text-xs text-violet-500">已选 {selectedTags.size} 个</span>
+                )}
+              </div>
+
+              {/* 搜索 */}
+              <div className="relative mb-1.5">
+                <input
+                  type="text"
+                  value={tagSearch}
+                  onChange={e => setTagSearch(e.target.value)}
+                  placeholder="搜索标签..."
+                  className="w-full px-3 py-1 text-xs border border-gray-200 rounded-md focus:outline-none focus:border-violet-300"
+                />
+              </div>
+
+              {/* 已选标签 */}
+              {selectedTags.size > 0 && (
+                <div className="flex flex-wrap gap-1 mb-1.5">
+                  {Array.from(selectedTags).map(tagName => (
+                    <span key={tagName} className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] bg-violet-50 text-violet-700 border border-violet-200 rounded-full">
+                      {tagName}
+                      <button onClick={() => setSelectedTags(prev => { const next = new Set(prev); next.delete(tagName); return next; })}>
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* 按分类展开的标签列表 */}
+              <div className="max-h-[120px] overflow-y-auto border border-gray-100 rounded-md p-1.5 space-y-0.5">
+                {categories.map(cat => {
+                  const catTags = (tagsByCategory[cat.name] || []).filter(t =>
+                    !tagSearch || t.name.toLowerCase().includes(tagSearch.toLowerCase()) ||
+                    (t.description && t.description.toLowerCase().includes(tagSearch.toLowerCase()))
+                  );
+                  if (catTags.length === 0) return null;
+                  const isExpanded = expandedTagCats[cat.name] ?? false;
+
+                  return (
+                    <div key={cat.name}>
+                      <button onClick={() => setExpandedTagCats(prev => ({ ...prev, [cat.name]: !prev[cat.name] }))}
+                        className="w-full flex items-center gap-1 py-0.5 text-left"
+                        title={cat.description}>
+                        {isExpanded ? <ChevronDown className="w-3 h-3 text-gray-400" /> : <ChevronRight className="w-3 h-3 text-gray-400" />}
+                        <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: cat.color }} />
+                        <span className="text-[10px] text-gray-500">{cat.name}</span>
+                      </button>
+                      {isExpanded && (
+                        <div className="ml-3 flex flex-wrap gap-1 py-0.5">
+                          {catTags.map(tag => {
+                            const isSelected = selectedTags.has(tag.name);
+                            return (
+                              <button
+                                key={tag.id}
+                                onClick={() => setSelectedTags(prev => {
+                                  const next = new Set(prev);
+                                  if (isSelected) next.delete(tag.name); else next.add(tag.name);
+                                  return next;
+                                })}
+                                title={tag.description}
+                                className={`px-1.5 py-0.5 text-[10px] rounded border transition-colors ${
+                                  isSelected
+                                    ? 'bg-violet-50 text-violet-700 border-violet-300 font-medium'
+                                    : 'text-gray-500 border-gray-200 hover:border-violet-200 hover:bg-violet-50/50'
+                                }`}
+                              >
+                                {tag.name}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* 导出提示 */}
             <div className="flex items-center gap-2 px-3 py-2 bg-brand-light rounded-lg shrink-0">
               <BookOpen className="w-4 h-4 text-brand shrink-0" />
@@ -377,10 +630,15 @@ export default function ExtractPlotModal({ isOpen, onClose }: ExtractPlotModalPr
             {/* 开始提炼按钮 */}
             <button
               onClick={handleExtract}
-              disabled={isExtracting || selectedChapterIds.size === 0 || !hasApiConfig}
+              disabled={isExtracting || isAiTagging || selectedChapterIds.size === 0 || !hasApiConfig}
               className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed transition-colors shrink-0"
             >
-              {isExtracting ? (
+              {isAiTagging ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-violet-200" />
+                  <span>AI正在分类标签...</span>
+                </>
+              ) : isExtracting ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>正在提炼 ({progress + 1}/{selectedChapterIds.size})</span>
@@ -433,10 +691,11 @@ export default function ExtractPlotModal({ isOpen, onClose }: ExtractPlotModalPr
                       <pre className="text-xs text-gray-600 leading-relaxed whitespace-pre-wrap font-sans">{result.plotText}</pre>
                     </div>
                   ))}
-                  {isExtracting && (
-                    <div className="flex items-center justify-center py-4">
-                      <Loader2 className="w-5 h-5 text-brand animate-spin mr-2" />
-                      <span className="text-xs text-gray-400">正在提炼第 {progress + 1}/{selectedChapterIds.size} 章...</span>
+                  {isAiTagging && (
+                    <div className="flex flex-col items-center justify-center py-8 gap-2">
+                      <Loader2 className="w-6 h-6 text-violet-500 animate-spin" />
+                      <span className="text-sm text-violet-600 font-medium">AI正在分析剧情并自动分类标签...</span>
+                      <span className="text-xs text-gray-400">请稍候，即将弹出标签确认窗口</span>
                     </div>
                   )}
                 </div>
@@ -444,6 +703,107 @@ export default function ExtractPlotModal({ isOpen, onClose }: ExtractPlotModalPr
             )}
           </div>
         </div>
+
+        {/* ═══ AI标签分类确认弹窗 ═══ */}
+        {showTagConfirm && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowTagConfirm(false)}>
+            <div className="w-[700px] max-w-[95vw] max-h-[85vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}>
+              {/* 头部 */}
+              <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Tag className="w-5 h-5 text-violet-500" />
+                  <h3 className="text-base font-bold text-gray-900">AI标签分类结果</h3>
+                  <span className="text-xs text-gray-400">({pendingSaveResults.length} 个剧情点)</span>
+                </div>
+                <button onClick={() => setShowTagConfirm(false)}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-md transition-colors">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* 内容 */}
+              <div className="flex-1 overflow-y-auto p-5 space-y-4">
+                <p className="text-xs text-gray-500">AI已为每个剧情点推荐标签，您可以修改或确认。每个剧情点至少选1个，最多10个。</p>
+
+                {pendingSaveResults.map((result) => {
+                  const assigned = aiTagAssignments[result.chapterId] || [];
+                  return (
+                    <div key={result.chapterId} className="border border-gray-200 rounded-lg p-4">
+                      {/* 章节标题 */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <Sparkles className="w-3.5 h-3.5 text-brand shrink-0" />
+                        <span className="text-sm font-semibold text-gray-800">{result.chapterTitle}</span>
+                        <span className={`text-[10px] ml-auto px-1.5 py-0.5 rounded ${assigned.length >= 1 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'}`}>
+                          {assigned.length} 个标签
+                        </span>
+                      </div>
+
+                      {/* 剧情摘要 */}
+                      <p className="text-xs text-gray-500 leading-relaxed mb-3 line-clamp-2 bg-gray-50 p-2 rounded">
+                        {result.plotText}
+                      </p>
+
+                      {/* 已选标签 */}
+                      <div className="mb-2">
+                        <span className="text-[10px] text-gray-400 mb-1 block">已选标签（点击删除）：</span>
+                        <div className="flex flex-wrap gap-1">
+                          {assigned.map(tagName => (
+                            <button key={tagName}
+                              onClick={() => toggleResultTag(result.chapterId, tagName)}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] bg-violet-50 text-violet-700 border border-violet-200 rounded-full hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-colors"
+                              title="点击删除">
+                              {tagName}
+                              <X className="w-2.5 h-2.5" />
+                            </button>
+                          ))}
+                          {assigned.length === 0 && (
+                            <span className="text-[10px] text-red-400">请至少选择1个标签</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 可选标签 */}
+                      <div>
+                        <span className="text-[10px] text-gray-400 mb-1 block">可选标签（点击添加）：</span>
+                        <div className="flex flex-wrap gap-1 max-h-[120px] overflow-y-auto">
+                          {tags.filter(t => !assigned.includes(t.name)).map(tag => (
+                            <button key={tag.id}
+                              onClick={() => toggleResultTag(result.chapterId, tag.name)}
+                              disabled={assigned.length >= 10}
+                              className="px-1.5 py-0.5 text-[10px] rounded border text-gray-500 border-gray-200 hover:border-violet-300 hover:bg-violet-50 transition-colors disabled:opacity-30"
+                              title={tag.description}>
+                              {tag.name}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* 底部 */}
+              <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 shrink-0">
+                <span className="text-xs text-gray-400">
+                  {Object.values(aiTagAssignments).filter(a => a.length >= 1).length} / {pendingSaveResults.length} 个已满足最少1个标签
+                </span>
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setShowTagConfirm(false)}
+                    className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-md hover:bg-gray-50">
+                    取消
+                  </button>
+                  <button onClick={handleConfirmSave}
+                    disabled={Object.values(aiTagAssignments).some(a => a.length < 1)}
+                    className="flex items-center gap-1.5 px-5 py-2 text-sm text-white bg-brand rounded-md hover:bg-brand-dark disabled:opacity-50 disabled:cursor-not-allowed">
+                    <Check className="w-4 h-4" />
+                    确认保存
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* 资料库弹窗 */}
         {showMaterials && (

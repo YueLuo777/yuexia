@@ -61,7 +61,7 @@ export const DEFAULT_NAV_CONFIG: NavGroupConfig[] = [
     items: [
       { iconName: 'Database', label: '资料库', to: '/materials' },
       { iconName: 'Database', label: '提示词管理', to: '/prompts' },
-      { iconName: 'Database', label: '数据库设置', to: '/db-settings' },
+      { iconName: 'Database', label: '云端设置', to: '/db-settings' },
     ],
   },
   {
@@ -81,14 +81,13 @@ export const DEFAULT_NAV_CONFIG: NavGroupConfig[] = [
     items: [
       { iconName: 'Activity', label: '调用数据', to: '/call-data' },
       { iconName: 'Settings', label: '按钮颜色', to: '/button-test' },
-      { iconName: 'Settings', label: '测试1', to: '/test1' },
     ],
   },
 
 ];
 
 // 修改 key 名称强制刷新（当默认导航结构变更时使用新 key）
-const NAV_CONFIG_KEY = 'nav_config_v37';
+const NAV_CONFIG_KEY = 'nav_config_v41';
 
 function isValidNavConfig(config: unknown): config is NavGroupConfig[] {
   if (!Array.isArray(config)) return false;
@@ -120,9 +119,12 @@ export function loadNavConfig(): NavGroupConfig[] {
       if (isValidNavConfig(parsed)) {
         // 检测是否为旧格式：包含已废弃的导航组标题
         const hasOldZone = parsed.some((g: NavGroupConfig) =>
-          ['作家专区', '编剧专区', '测试专区', '其他功能'].includes(g.title)
+          ['作家专区', '编剧专区', '测试专区', '其他功能', '数据库专区'].includes(g.title)
         );
-        if (hasOldZone) {
+        const hasOldItemLabel = parsed.some((g: NavGroupConfig) =>
+          g.items?.some((item: NavItemConfig) => item.label === '数据库设置')
+        );
+        if (hasOldZone || hasOldItemLabel) {
           localStorage.removeItem(NAV_CONFIG_KEY);
           return JSON.parse(JSON.stringify(DEFAULT_NAV_CONFIG));
         }
