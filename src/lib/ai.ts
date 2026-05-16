@@ -28,7 +28,7 @@ export function getDefaultModelId(): string {
   return models[0]?.id || '';
 }
 
-export async function callModelAPI(content: string, modelId?: string): Promise<string> {
+export async function callModelAPI(content: string, modelId?: string, signal?: AbortSignal): Promise<string> {
   try {
     const raw = localStorage.getItem('api_settings_v2');
     if (!raw) return '【错误】未配置模型，请先在模型管理中配置。';
@@ -44,6 +44,7 @@ export async function callModelAPI(content: string, modelId?: string): Promise<s
 
     const baseUrl = model.baseUrl.replace(/\/+$/, '');
     const response = await fetch(`${baseUrl}/chat/completions`, {
+      signal,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

@@ -6,13 +6,13 @@
 import {
   User, LayoutGrid, BookOpen, FileText, Film, Database, Users,
   Settings, FolderOpen, FlaskConical, Lightbulb, ListTree, Library,
-  Activity, Tag,
+  Activity, Tag, Sparkles,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 // ── icon 名称到组件的映射 ──
 export const iconMap: Record<string, LucideIcon> = {
-  User, LayoutGrid, BookOpen, FileText, Film, Database, Users, Settings, FolderOpen, FlaskConical, Lightbulb, ListTree, Library, Activity, Tag,
+  User, LayoutGrid, BookOpen, FileText, Film, Database, Users, Settings, FolderOpen, FlaskConical, Lightbulb, ListTree, Library, Activity, Tag, Sparkles,
 };
 
 export function getIconByName(name: string): LucideIcon {
@@ -67,11 +67,19 @@ export const DEFAULT_NAV_CONFIG: NavGroupConfig[] = [
   {
     title: '功能专区',
     iconName: 'Lightbulb',
-    hidden: false,
+    hidden: true,
     items: [
       { iconName: 'Lightbulb', label: '脑洞生成器', to: '/idea-generator' },
       { iconName: 'ListTree', label: '大纲生成器', to: '/outline-generator' },
       { iconName: 'Library', label: '脑洞库', to: '/idea-library' },
+    ],
+  },
+  {
+    title: '提炼专区',
+    iconName: 'Sparkles',
+    hidden: false,
+    items: [
+      { iconName: 'Sparkles', label: '提炼剧情', to: '/extract' },
     ],
   },
   {
@@ -87,7 +95,7 @@ export const DEFAULT_NAV_CONFIG: NavGroupConfig[] = [
 ];
 
 // 修改 key 名称强制刷新（当默认导航结构变更时使用新 key）
-const NAV_CONFIG_KEY = 'nav_config_v41';
+const NAV_CONFIG_KEY = 'nav_config_v42';
 
 function isValidNavConfig(config: unknown): config is NavGroupConfig[] {
   if (!Array.isArray(config)) return false;
