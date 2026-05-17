@@ -4,7 +4,7 @@ import {
   Layers, Link, TrendingUp, LayoutGrid, Hash, Star, Zap,
   GripVertical, Plus, Trash2, ChevronLeft, Bot, Library,
 } from 'lucide-react';
-import { getEnabledModels, getDefaultModelId, callModelAPIStream } from '@/lib/ai';
+import { getEnabledModels, getDefaultModelId, callModelAPI, callModelAPIStream } from '@/lib/ai';
 
 import { useExtractModules, DEFAULT_MODULES, exportExtractConfig, importExtractConfig } from '@/hooks/useExtractModules';
 import { toPinyin } from '@/lib/pinyin';
@@ -307,6 +307,10 @@ export default function ExtractPage() {
   const [extractMode, setExtractMode] = useState<ExtractMode>(savedCfg.extractMode);
   const [chaptersPerBatch, setChaptersPerBatch] = useState(savedCfg.chaptersPerBatch);
   const [selectedModel, setSelectedModel] = useState('');
+  // 流式传输开关
+  const [streamEnabled, setStreamEnabled] = useState(() => {
+    try { return localStorage.getItem('extract_stream_enabled') !== 'false'; } catch { return true; }
+  });
   const [history, setHistory] = useState<HistoryRecord[]>(loadHistory);
 
   // ─── 确认提炼弹窗 ───
@@ -325,6 +329,9 @@ export default function ExtractPage() {
   const [importText, setImportText] = useState('');
   const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
   const fileImportRef = useRef<HTMLInputElement>(null);
+  // 导入剧情库确认弹窗
+  const [showImportLibrary, setShowImportLibrary] = useState(false);
+  const [importLibraryCount, setImportLibraryCount] = useState(0);
   // ─── 删除确认弹窗 ───
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteTargetId, setDeleteTargetId] = useState<string>('');
@@ -512,71 +519,58 @@ export default function ExtractPage() {
         const chapterText = batch.content.slice(0, 12000);
         const { systemPrompt, userPrompt } = buildPrompt(activeSystemKeys, activeOutputKeys, chapterText, allModules);
 
-        // ═══ 流式输出 + 实时拆分剧情点 ═══
-        const SEP = '\n---\n';           // 剧情点分隔符
-        const BUF_KEEP = 10;              // buffer末尾保留字符数（防分隔符被chunk切断）
-        let buffer = '';                  // 文本缓冲仓库
-        let pointIdx = allPoints.length;  // 当前正在写入的剧情点索引
+        if (streamEnabled) {
+          // ═══ 流式模式：实时拆分剧情点 ═══
+          const SEP = '\n---\n';
+          const BUF_KEEP = 10;
+          let buffer = '';
+          let pointIdx = allPoints.length;
 
-        // 创建第一个空卡片（AI将直接往这里写）
-        allPoints.push({ _raw: '', _chapter: batch.title } as ExtractedPlotPoint);
-        setPlotPoints([...allPoints]);
+          allPoints.push({ _raw: '', _chapter: batch.title } as ExtractedPlotPoint);
+          setPlotPoints([...allPoints]);
 
-        await callModelAPIStream(
-          `${systemPrompt}\n\n${userPrompt}`,
-          selectedModel || undefined,
-          signal,
-          (delta, _accumulated, isDone) => {
-            if (!delta && !isDone) return;
-
-            if (isDone) {
-              // 流式结束：buffer中剩余内容写入当前卡片
-              const existingRaw = ((allPoints[pointIdx] as any)?._raw) || '';
-              allPoints[pointIdx] = {
-                ...allPoints[pointIdx],
-                _raw: existingRaw + buffer
-              };
-              buffer = '';
+          await callModelAPIStream(
+            `${systemPrompt}\n\n${userPrompt}`,
+            selectedModel || undefined,
+            signal,
+            (delta, _accumulated, isDone) => {
+              if (!delta && !isDone) return;
+              if (isDone) {
+                allPoints[pointIdx] = { ...allPoints[pointIdx], _raw: ((allPoints[pointIdx] as any)?._raw || '') + buffer };
+                buffer = '';
+                setPlotPoints([...allPoints]);
+                return;
+              }
+              buffer += delta;
+              let sepIdx;
+              while ((sepIdx = buffer.indexOf(SEP)) !== -1) {
+                const before = buffer.slice(0, sepIdx);
+                allPoints[pointIdx] = { ...allPoints[pointIdx], _raw: ((allPoints[pointIdx] as any)?._raw || '') + before };
+                buffer = buffer.slice(sepIdx + SEP.length);
+                pointIdx++;
+                allPoints.push({ _raw: '', _chapter: batch.title } as ExtractedPlotPoint);
+              }
+              if (buffer.length > BUF_KEEP) {
+                const safeLen = buffer.length - BUF_KEEP;
+                allPoints[pointIdx] = { ...allPoints[pointIdx], _raw: ((allPoints[pointIdx] as any)?._raw || '') + buffer.slice(0, safeLen) };
+                buffer = buffer.slice(safeLen);
+              }
               setPlotPoints([...allPoints]);
-              return;
             }
-
-            // 追加到 buffer
-            buffer += delta;
-
-            // 实时检测分隔符 \n---\n
-            let sepIdx;
-            while ((sepIdx = buffer.indexOf(SEP)) !== -1) {
-              // 分隔符前面的内容 → 当前卡片完成
-              const before = buffer.slice(0, sepIdx);
-              allPoints[pointIdx] = {
-                ...allPoints[pointIdx],
-                _raw: ((allPoints[pointIdx] as any)?._raw || '') + before
-              };
-
-              // 分隔符后面的内容 → 留在buffer中
-              buffer = buffer.slice(sepIdx + SEP.length);
-
-              // 创建新卡片
-              pointIdx++;
-              allPoints.push({ _raw: '', _chapter: batch.title } as ExtractedPlotPoint);
+          );
+        } else {
+          // ═══ 非流式模式：整个章节输出 = 1个剧情点 ═══
+          const result = await callModelAPI(`${systemPrompt}\n\n${userPrompt}`, selectedModel || undefined);
+          if (result.startsWith('【错误】') || result.startsWith('【已终止】')) {
+            console.error(result);
+          } else {
+            const cleaned = cleanAiResponse(result);
+            if (cleaned && cleaned !== '无实质剧情点') {
+              allPoints.push({ _raw: cleaned, _chapter: batch.title } as ExtractedPlotPoint);
             }
-
-            // buffer 太长：把安全部分写入卡片，只保留 BUF_KEEP 个字符防切断
-            if (buffer.length > BUF_KEEP) {
-              const safeLen = buffer.length - BUF_KEEP;
-              const writeOut = buffer.slice(0, safeLen);
-              allPoints[pointIdx] = {
-                ...allPoints[pointIdx],
-                _raw: ((allPoints[pointIdx] as any)?._raw || '') + writeOut
-              };
-              buffer = buffer.slice(safeLen);
-            }
-
-            // 触发重新渲染（剧情点卡片实时显示AI输出）
             setPlotPoints([...allPoints]);
           }
-        );
+        }
       } catch (err) {
         if ((err as any)?.name === 'AbortError') { console.log('提炼已中止'); break; }
         console.error('提炼失败:', err);
@@ -720,6 +714,28 @@ export default function ExtractPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* 流式传输开关 */}
+            <label
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg border cursor-pointer transition-colors select-none ${
+                streamEnabled
+                  ? 'text-brand bg-brand-light border-brand'
+                  : 'text-gray-500 bg-gray-100 border-gray-200'
+              }`}
+              title={streamEnabled ? '流式传输已开启：AI输出实时显示' : '流式传输已关闭：等AI全部写完再显示'}
+            >
+              <input
+                type="checkbox"
+                checked={streamEnabled}
+                onChange={(e) => {
+                  const v = e.target.checked;
+                  setStreamEnabled(v);
+                  try { localStorage.setItem('extract_stream_enabled', String(v)); } catch { /* */ }
+                }}
+                className="w-3 h-3 text-brand rounded cursor-pointer"
+              />
+              <Zap className="w-3 h-3" />
+              <span>流式传输</span>
+            </label>
             {/* 导出配置 */}
             <button
               onClick={() => {
@@ -981,17 +997,37 @@ export default function ExtractPage() {
             <>
               {/* 四列配置：AI模型 | 提炼模式 | 导出设置 | 历史记录 */}
               <div className="flex gap-3">
-                {/* AI 模型 */}
-                <div className="w-[18%] bg-white rounded-xl border border-gray-200 p-3">
+                {/* AI 模型 — 平铺卡片展示 */}
+                <div className="w-[22%] bg-white rounded-xl border border-gray-200 p-3">
                   <h3 className="text-xs font-bold text-gray-900 mb-2 flex items-center gap-1">
                     <Settings className="w-3.5 h-3.5 text-brand" /> AI 模型
                   </h3>
-                  <select value={selectedModel} onChange={e => setSelectedModel(e.target.value)}
-                    className="w-full px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-brand bg-white">
-                    {models.length === 0 && <option value="">未配置</option>}
-                    {models.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                  </select>
-                  {models.length === 0 && <p className="mt-1 text-[9px] text-amber-500">去「云端设置」配置</p>}
+                  {models.length === 0 && (
+                    <p className="text-[10px] text-amber-500">去「模型管理」配置</p>
+                  )}
+                  <div className="space-y-1.5 max-h-[180px] overflow-y-auto">
+                    {models.map(m => (
+                      <button
+                        key={m.id}
+                        onClick={() => setSelectedModel(m.id)}
+                        className={`w-full text-left px-2.5 py-1.5 rounded-lg border transition-all text-xs ${
+                          (selectedModel || getDefaultModelId()) === m.id
+                            ? 'border-brand bg-brand-light text-brand font-medium'
+                            : 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <span>{m.name}</span>
+                          {(selectedModel || getDefaultModelId()) === m.id && (
+                            <Check className="w-3 h-3 text-brand" />
+                          )}
+                        </div>
+                        {m.provider && (
+                          <div className="text-[9px] text-gray-400 mt-0.5">{m.provider}</div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 {/* 提炼模式 */}
@@ -1277,15 +1313,6 @@ export default function ExtractPage() {
                 </div>
               </div>
 
-              {/* 系统指令预览 */}
-              {activeSystemKeys.length > 0 && (
-                <div className="bg-red-50 rounded-lg p-3 border border-red-100">
-                  <div className="text-[10px] font-bold text-red-600 mb-1">系统指令</div>
-                  <div className="text-[11px] text-gray-600">
-                    {activeSystemKeys.map(k => allModules[k]?.label).join('、')}
-                  </div>
-                </div>
-              )}
             </div>
             <div className="px-5 py-3 border-t border-gray-100 flex justify-end gap-3">
               <button onClick={() => setShowConfirm(false)}
@@ -1342,59 +1369,61 @@ export default function ExtractPage() {
       {/* ═══════ 提炼结果弹层 ═══════ */}
       {showResult && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-8 bg-black/30 backdrop-blur-sm">
-          <div className="w-[720px] max-h-[85vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
+          <div className="w-[800px] max-h-[90vh] min-h-[600px] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
             <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 {isProcessing && <Loader2 className="w-4 h-4 text-brand animate-spin" />}
                 <h3 className="text-sm font-bold text-gray-900">{isProcessing ? '提炼中...' : `完成（${plotPoints.length} 条）`}</h3>
+                {/* ═══ 进度 + 模型预览 ═══ */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">{progress.current} / {progress.total}</span>
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-50 border border-blue-100 rounded-md">
+                    <Bot className="w-3 h-3 text-blue-500 shrink-0" />
+                    <span className="text-[10px] text-blue-600">{(() => {
+                      const effectiveModelId = selectedModel || getDefaultModelId();
+                      const cfg = getEnabledModels().find(m => m.id === effectiveModelId);
+                      if (!cfg) return effectiveModelId;
+                      return cfg.provider ? `${cfg.name}（${cfg.provider}）` : cfg.name;
+                    })()}</span>
+                  </div>
+                </div>
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-xs text-gray-500">{progress.current} / {progress.total}</span>
-                {isProcessing ? (
-                  <button onClick={handleAbort} disabled={isAborting}
-                    className="flex items-center gap-1 px-3 py-1 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors">
-                    <Loader2 className={`w-3 h-3 ${isAborting ? 'animate-spin' : ''}`} /> {isAborting ? '中止中...' : '中止提炼'}
-                  </button>
-                ) : (
-                  <button onClick={() => setShowResult(false)}
-                    className="p-1 text-gray-400 hover:text-gray-600 rounded">
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
+                <button onClick={() => { setShowResult(false); setPlotPoints([]); }}
+                  className="p-1 text-gray-400 hover:text-gray-600 rounded">
+                  <X className="w-4 h-4" />
+                </button>
               </div>
             </div>
-            <div className="shrink-0 px-4 py-2 border-b border-gray-100">
-              <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%` }} />
-              </div>
-              {/* ═══ 模型预览（最上面一行，始终显示）═══ */}
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50/80 border border-blue-100 rounded-md">
-                <Bot className="w-3.5 h-3.5 text-blue-500 shrink-0" />
-                <span className="text-[11px] text-blue-600 font-medium">正在使用模型：</span>
-                <span className="text-[11px] text-gray-800 font-semibold">{(() => {
-                  const effectiveModelId = selectedModel || getDefaultModelId();
-                  const cfg = getEnabledModels().find(m => m.id === effectiveModelId);
-                  if (!cfg) return effectiveModelId;
-                  return cfg.provider ? `${cfg.name}（${cfg.provider}）` : cfg.name;
-                })()}</span>
-                {isProcessing && <span className="text-[10px] text-blue-400 ml-1">· 提炼中</span>}
-              </div>
-
-              {/* 提炼状态指示器已删除：章节标题 + AI实时输出提示 */}
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            <div className="flex-1 overflow-hidden p-4 flex flex-col gap-3 min-h-0">
               {plotPoints.length === 0 && !isProcessing && (
                 <div className="text-center text-gray-400 py-8">暂无提炼结果</div>
+              )}
+              {/* 提炼中默认显示一个空卡片，不显得单调 */}
+              {plotPoints.length === 0 && isProcessing && (
+                <div className="flex-1 min-h-0 border border-gray-400 rounded-lg overflow-hidden flex flex-col">
+                  <div className="px-3 py-1.5 bg-brand-light border-b border-gray-300 flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-brand">剧情点 1</span>
+                    <span className="ml-auto flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                      <span className="text-[9px] text-green-600">输出中</span>
+                    </span>
+                  </div>
+                  <div className="flex-1 p-3 text-[13px] text-gray-300 overflow-y-auto">
+                    <span>等待AI输出...</span>
+                    <span className="inline-block w-2 h-4 bg-brand ml-0.5 animate-pulse align-middle" />
+                  </div>
+                </div>
               )}
               {plotPoints.map((point, idx) => {
                 const content = (point as any)._raw || '';
                 const chapter = (point as any)._chapter || '';
-                // 最后一张卡片且正在提炼中 → 显示闪烁光标
                 const isLast = idx === plotPoints.length - 1;
                 const isStreaming = isProcessing && isLast;
+                const isSingle = plotPoints.length === 1;
                 return (
-                  <div key={idx} className="border border-gray-100 rounded-lg overflow-hidden">
-                    <div className="px-3 py-1.5 bg-brand-light border-b border-gray-100 flex items-center gap-2">
+                  <div key={idx} className={`border border-gray-400 rounded-lg overflow-hidden flex flex-col ${isSingle ? 'flex-1 min-h-0' : ''}`}>
+                    <div className="px-3 py-1.5 bg-brand-light border-b border-gray-300 flex items-center gap-2">
                       <span className="text-[10px] font-bold text-brand">剧情点 {idx + 1}</span>
                       {chapter && <span className="text-[10px] text-gray-500 truncate">{chapter}</span>}
                       {isStreaming && (
@@ -1404,7 +1433,7 @@ export default function ExtractPage() {
                         </span>
                       )}
                     </div>
-                    <div className="p-3 text-[13px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words min-h-[2em]">
+                    <div className={`p-3 text-[13px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words overflow-y-auto ${isSingle ? 'flex-1 min-h-0' : ''}`}>
                       {content}
                       {isStreaming && <span className="inline-block w-2 h-4 bg-brand ml-0.5 animate-pulse align-middle" />}
                     </div>
@@ -1412,16 +1441,24 @@ export default function ExtractPage() {
                 );
               })}
             </div>
-            <div className="shrink-0 px-4 py-3 border-t border-gray-200 flex justify-between">
-              <button onClick={() => { setShowResult(false); setPlotPoints([]); }}
-                className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50">关闭</button>
-              {!isProcessing && plotPoints.length > 0 && (
+            <div className="shrink-0 px-4 py-3 border-t border-gray-200 flex justify-end gap-2">
+              {isProcessing ? (
+                <button onClick={handleAbort} disabled={isAborting}
+                  className="flex items-center gap-1 px-5 py-2 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors">
+                  <Loader2 className={`w-4 h-4 ${isAborting ? 'animate-spin' : ''}`} /> {isAborting ? '中止中...' : '中止提炼'}
+                </button>
+              ) : plotPoints.length > 0 && (
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
-                      const fileNames = files.filter(f => f.selected).map(f => f.name).join(', ');
-                      const count = importToPlotLibrary(plotPoints, fileNames);
-                      alert(`成功导入 ${count} 条剧情点到剧情库`);
+                      const SKIP_KEYWORDS = ['无实质剧情点', '未达到提炼标准', '无可提炼剧情点', '跳过'];
+                      const validCount = plotPoints.filter(p => {
+                        const raw = ((p as any)._raw || '').trim();
+                        if (!raw) return false;
+                        return !SKIP_KEYWORDS.some(kw => raw.toLowerCase().includes(kw));
+                      }).length;
+                      setImportLibraryCount(validCount);
+                      setShowImportLibrary(true);
                     }}
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-brand border border-brand rounded-lg hover:bg-brand-light transition-colors"
                   >
@@ -1508,6 +1545,59 @@ export default function ExtractPage() {
                 }}
                 disabled={!importText.trim()}
                 className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark disabled:opacity-50 transition-colors"
+              >
+                <Check className="w-4 h-4" /> 确认导入
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════ 导入剧情库确认弹窗 ═══════ */}
+      {showImportLibrary && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="w-[420px] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
+            {/* 头部 */}
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
+              <div className="w-10 h-10 bg-brand-light rounded-lg flex items-center justify-center">
+                <Library className="w-5 h-5 text-brand" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-gray-900">导入剧情库</h3>
+                <p className="text-[11px] text-gray-400 mt-0.5">将提炼结果导入剧情库以便后续查看</p>
+              </div>
+            </div>
+            {/* 内容 */}
+            <div className="p-5 space-y-3">
+              <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg">
+                <span className="text-xs text-gray-500">有效剧情点：</span>
+                <span className="text-sm font-bold text-brand">{importLibraryCount}</span>
+                <span className="text-xs text-gray-400">条（已过滤无效内容）</span>
+              </div>
+              <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
+                <p className="text-[11px] text-amber-700">
+                  导入后可在「剧情库」页面查看、搜索和排序所有剧情点。
+                </p>
+              </div>
+            </div>
+            {/* 底部按钮 */}
+            <div className="px-5 py-3 border-t border-gray-100 flex justify-end gap-3">
+              <button onClick={() => setShowImportLibrary(false)}
+                className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  const fileNames = files.filter(f => f.selected).map(f => f.name).join(', ');
+                  const count = importToPlotLibrary(plotPoints, fileNames);
+                  setShowImportLibrary(false);
+                  // 显示成功提示（替换alert）
+                  setTimeout(() => {
+                    setShowResult(false);
+                    window.location.hash = '#/plot-library';
+                  }, 500);
+                }}
+                className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors"
               >
                 <Check className="w-4 h-4" /> 确认导入
               </button>

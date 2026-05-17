@@ -34,6 +34,8 @@ function saveLibrary(items: PlotLibraryItem[]) {
  * 纯函数：将剧情点导入剧情库（不依赖React hook）
  * @param points 要导入的剧情点（_raw 为 Markdown 内容，_chapter 为章节名）
  */
+export type { PlotLibraryItem };
+
 export function importToPlotLibrary(
   points: Array<{ _raw?: string; _chapter?: string }>,
   sourceFile: string = '未知文件'

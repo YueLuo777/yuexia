@@ -17,6 +17,7 @@ export default function NavSettingsModal({ isOpen, onClose, config, onSave, onRe
   const [editingIdx, setEditingIdx] = useState<{ gi: number; ii: number } | null>(null);
   const [editValue, setEditValue] = useState('');
   const [dragSrc, setDragSrc] = useState<{ groupIdx: number; itemIdx: number } | null>(null);
+  const [dragOver, setDragOver] = useState<{ gi: number; ii: number; pos: 'before' | 'after' } | null>(null);
   // 专区标题编辑状态
   const [editingGroupIdx, setEditingGroupIdx] = useState<number | null>(null);
   const [editingGroupValue, setEditingGroupValue] = useState('');
@@ -125,8 +126,18 @@ export default function NavSettingsModal({ isOpen, onClose, config, onSave, onRe
     setDragSrc({ groupIdx, itemIdx });
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragOver = (e: React.DragEvent, gi: number, ii: number) => {
     e.preventDefault();
+    e.stopPropagation();
+    // 计算鼠标位置决定插入方向
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const midY = rect.top + rect.height / 2;
+    const pos = e.clientY < midY ? 'before' : 'after';
+    setDragOver({ gi, ii, pos });
+  };
+
+  const handleDragLeave = () => {
+    setDragOver(null);
   };
 
   const handleDrop = (targetGroupIdx: number, targetItemIdx: number) => {
@@ -135,11 +146,25 @@ export default function NavSettingsModal({ isOpen, onClose, config, onSave, onRe
     const srcItems = next[dragSrc.groupIdx].items;
     const [moved] = srcItems.splice(dragSrc.itemIdx, 1);
     const tgtItems = next[targetGroupIdx].items;
-    const insertIdx = Math.min(targetItemIdx, tgtItems.length);
+    // 根据插入位置调整索引
+    let insertIdx = targetItemIdx;
+    if (dragSrc.groupIdx === targetGroupIdx && dragSrc.itemIdx < targetItemIdx) {
+      // 同组拖拽，源在前面，目标索引需要-1
+      insertIdx = dragOver?.pos === 'after' ? targetItemIdx : targetItemIdx - 1;
+    } else {
+      insertIdx = dragOver?.pos === 'after' ? targetItemIdx + 1 : targetItemIdx;
+    }
+    insertIdx = Math.max(0, Math.min(insertIdx, tgtItems.length));
     tgtItems.splice(insertIdx, 0, moved);
     saveDraft(next);
     setDragSrc(null);
+    setDragOver(null);
     setEditingIdx(null);
+  };
+
+  const handleDragEnd = () => {
+    setDragSrc(null);
+    setDragOver(null);
   };
 
   // ── 隐藏/恢复 ──
@@ -215,21 +240,27 @@ export default function NavSettingsModal({ isOpen, onClose, config, onSave, onRe
             const isEditing = editingIdx?.gi === gi && editingIdx?.ii === ii;
             const isHidden = !!item.hidden;
             return (
-              <div
-                key={ii}
-                draggable={!isEditing && !isHidden}
-                onDragStart={() => handleDragStart(gi, ii)}
-                onDragOver={handleDragOver}
-                onDrop={() => handleDrop(gi, ii)}
-                className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md transition-colors ${
-                  isHidden
-                    ? 'bg-gray-100 opacity-60'
-                    : dragSrc?.groupIdx === gi && dragSrc?.itemIdx === ii
-                      ? 'bg-brand/10 border border-dashed border-brand/30'
-                      : 'bg-gray-50/50 hover:bg-gray-50 border border-transparent'
-                }`}
-              >
-                <GripVertical className={`w-3 h-3 shrink-0 ${isEditing || isHidden ? 'text-gray-200' : 'text-gray-300 cursor-grab active:cursor-grabbing'}`} />
+              <div key={ii} className="relative">
+                {/* 放置指示线（上方） */}
+                {dragOver?.gi === gi && dragOver?.ii === ii && dragOver?.pos === 'before' && (
+                  <div className="absolute -top-[3px] left-0 right-0 h-[3px] bg-brand rounded-full z-10" />
+                )}
+                <div
+                  draggable={!isEditing && !isHidden}
+                  onDragStart={() => handleDragStart(gi, ii)}
+                  onDragOver={(e) => handleDragOver(e, gi, ii)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={() => handleDrop(gi, ii)}
+                  onDragEnd={handleDragEnd}
+                  className={`flex items-center gap-1.5 px-2 py-2 rounded-md transition-all ${
+                    isHidden
+                      ? 'bg-gray-100 opacity-60'
+                      : dragSrc?.groupIdx === gi && dragSrc?.itemIdx === ii
+                        ? 'bg-brand/10 border-2 border-dashed border-brand/40 opacity-60 scale-[0.98]'
+                        : 'bg-gray-50/50 hover:bg-gray-50 border-2 border-transparent hover:border-gray-200'
+                  } ${!isEditing && !isHidden ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                >
+                  <GripVertical className={`w-3.5 h-3.5 shrink-0 ${isEditing || isHidden ? 'text-gray-200' : 'text-gray-400 hover:text-gray-600'}`} />
                 <ItemIcon className={`w-3 h-3 shrink-0 ${isHidden ? 'text-gray-300' : 'text-gray-400'}`} />
                 {isEditing ? (
                   <input
@@ -264,14 +295,19 @@ export default function NavSettingsModal({ isOpen, onClose, config, onSave, onRe
                     </button>
                   </>
                 )}
+                </div>
+                {/* 放置指示线（下方，最后一项显示在容器底部） */}
+                {dragOver?.gi === gi && dragOver?.ii === ii && dragOver?.pos === 'after' && (
+                  <div className="absolute -bottom-[3px] left-0 right-0 h-[3px] bg-brand rounded-full z-10" />
+                )}
               </div>
             );
           })}
           {group.items.length === 0 && (
             <div
-              onDragOver={handleDragOver}
+              onDragOver={(e) => { e.preventDefault(); }}
               onDrop={() => handleDrop(gi, 0)}
-              className="px-2 py-3 text-xs text-gray-300 border border-dashed border-gray-200 rounded-md hover:border-brand/30 hover:bg-brand/5 transition-colors text-center cursor-pointer"
+              className="px-2 py-4 text-xs text-gray-300 border border-dashed border-gray-200 rounded-md hover:border-brand/30 hover:bg-brand/5 transition-colors text-center cursor-pointer"
             >
               空专区，可从其他专区拖拽导航项过来
             </div>
