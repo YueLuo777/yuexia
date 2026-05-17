@@ -2,19 +2,20 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import {
   Sparkles, FileText, Settings, Play, Check, X, Loader2,
   Layers, Link, TrendingUp, LayoutGrid, Hash, Star, Zap,
-  GripVertical, Plus, Trash2, RotateCcw, ChevronLeft,
+  GripVertical, Plus, Trash2, ChevronLeft, Bot,
 } from 'lucide-react';
-import { getEnabledModels, callModelAPI } from '@/lib/ai';
-import { useExtractModules, DEFAULT_MODULES } from '@/hooks/useExtractModules';
+import { getEnabledModels, getDefaultModelId, callModelAPIStream } from '@/lib/ai';
+
+import { useExtractModules, DEFAULT_MODULES, exportExtractConfig, importExtractConfig } from '@/hooks/useExtractModules';
 import { toPinyin } from '@/lib/pinyin';
 import {
-  buildPrompt, parseAiResponse,
+  buildPrompt, cleanAiResponse, splitResults,
   type ExtractedPlotPoint,
 } from '@/lib/extractEngine';
 
 const FILES_CACHE_KEY = 'extract_files_cache';
 const HISTORY_KEY = 'extract_history_v1';
-type ExtractMode = 'chapter' | 'whole' | 'multi';
+type ExtractMode = 'chapter' | 'multi' | 'smart';
 
 const CONFIG_KEY = 'extract_config_v1';
 
@@ -30,7 +31,7 @@ function loadConfig(): SavedConfig {
     const raw = localStorage.getItem(CONFIG_KEY);
     if (raw) return JSON.parse(raw);
   } catch { /* */ }
-  return { outputMode: 'single', extractMode: 'chapter', chaptersPerBatch: 5, pointsPerFile: 100 };
+  return { outputMode: 'single', extractMode: 'chapter', chaptersPerBatch: 2, pointsPerFile: 100 };
 }
 function saveConfig(cfg: SavedConfig) {
   try { localStorage.setItem(CONFIG_KEY, JSON.stringify(cfg)); } catch { /* */ }
@@ -42,7 +43,10 @@ interface HistoryRecord {
   fileNames: string[];
   moduleLabels: string[];
   plotPointCount: number;
-  outputMode: string;
+  /** 提炼模式名称 */
+  extractModeLabel: string;
+  /** 完整的剧情点数据 */
+  plotPoints: ExtractedPlotPoint[];
 }
 
 interface FileItem { id: string; name: string; content: string; selected: boolean; }
@@ -51,9 +55,96 @@ interface ChapterItem { title: string; content: string; fileName: string; }
 const MODULE_ICONS: Record<string, typeof Layers> = {
   juqingshenfen: Layers, qiangzhiguize: Link,
   juqing: Layers, yinguoluoji: TrendingUp, zhuangtaizengliang: LayoutGrid,
-  houxugousi: Sparkles, juqingleixing: Hash, biaoqian: Star,
+  houxugousi: Sparkles, juqingleixing: Hash,
   huangjinsanzhangpinggu: Zap, jiazhipinggu: FileText,
 };
+
+// ─── 智能弹性分组：按内容密度自动调整合并范围 ───
+function buildSmartBatches(chapters: ChapterItem[]): ChapterItem[] {
+  if (chapters.length <= 2) return chapters;
+
+  const MIN_MERGE = 1;      // 高潮章节：单独提炼（最少1章）
+  const MAX_MERGE = 5;      // 灌水章节：最多合并5章
+  const LENGTH_THRESHOLD = 800; // 字数阈值：低于此值视为短章
+
+  const batches: ChapterItem[] = [];
+  let i = 0;
+
+  while (i < chapters.length) {
+    const ch = chapters[i];
+    const len = ch.content.length;
+
+    // 判断当前章节密度
+    const density = estimateDensity(ch.content);
+
+    // 高潮章节（高密度）：单独提炼
+    if (density === 'high' || len > 3000) {
+      batches.push(ch);
+      i += 1;
+      continue;
+    }
+
+    // 中低密度章节：尝试合并后续同类型章节
+    let mergeCount = 1;
+    let totalLen = len;
+
+    while (
+      i + mergeCount < chapters.length &&
+      mergeCount < MAX_MERGE &&
+      totalLen < 12000
+    ) {
+      const nextCh = chapters[i + mergeCount];
+      const nextLen = nextCh.content.length;
+      const nextDensity = estimateDensity(nextCh.content);
+
+      // 遇到高潮章节停止合并
+      if (nextDensity === 'high' || nextLen > 3000) break;
+
+      // 短章（低于阈值）优先合并
+      if (nextLen < LENGTH_THRESHOLD || mergeCount < MIN_MERGE) {
+        mergeCount += 1;
+        totalLen += nextLen;
+        continue;
+      }
+
+      // 中密度章节：允许合并但不超过最大值
+      mergeCount += 1;
+      totalLen += nextLen;
+    }
+
+    // 构建合并批次
+    if (mergeCount === 1) {
+      batches.push(ch);
+    } else {
+      const groupChapters = chapters.slice(i, i + mergeCount);
+      const startCh = i + 1;
+      const endCh = i + mergeCount;
+      const mergedContent = groupChapters.map(c => `【${c.title}】\n${c.content}`).join('\n\n---\n\n');
+      batches.push({
+        title: `第${startCh}-${endCh}章（智能合并）`,
+        content: mergedContent,
+        fileName: groupChapters[0].fileName,
+      });
+    }
+    i += mergeCount;
+  }
+
+  return batches;
+}
+
+/** 估计章节内容密度 */
+function estimateDensity(text: string): 'low' | 'medium' | 'high' {
+  const t = text.trim();
+  // 高潮指标：对话密度高、动作描写多、短句多
+  const dialogueRatio = (t.match(/[""""''""""]/g) || []).length / Math.max(t.length, 1);
+  const actionKeywords = ['杀', '战', '斗', '打', '逃', '追', '闪', '爆', '破', '斩', '刺', '拳', '刀', '剑', '血', '死', '怒', '吼', '咆哮', '尖叫', '颤抖', '冷汗'];
+  const actionCount = actionKeywords.reduce((sum, kw) => sum + (t.split(kw).length - 1), 0);
+  const density = dialogueRatio * 10 + actionCount / Math.max(t.length / 1000, 1);
+
+  if (density > 2.5) return 'high';
+  if (density > 1.2) return 'medium';
+  return 'low';
+}
 
 function splitChapters(content: string, fileName: string): ChapterItem[] {
   const patterns = [
@@ -96,12 +187,12 @@ function addHistory(record: Omit<HistoryRecord, 'id' | 'timestamp'>) {
 // ─── 左栏模块列表项 ───
 function ModuleListItem({
   id, mod, isActive, isSelected, Icon,
-  onToggleActive, onSelect, onDelete,
+  onToggleActive, onSelect,
   dragId, dragOverId, onDragStart, onDragOver, onDragLeave, onDrop,
   allMods,
 }: {
   id: string; mod: { label: string; requires?: string[] }; isActive: boolean; isSelected: boolean; Icon: typeof Layers;
-  onToggleActive: (id: string) => void; onSelect: (id: string) => void; onDelete: (id: string) => void;
+  onToggleActive: (id: string) => void; onSelect: (id: string) => void;
   dragId: string | null; dragOverId: string | null;
   onDragStart: (id: string) => void; onDragOver: (e: React.DragEvent, id: string) => void;
   onDragLeave: () => void; onDrop: (e: React.DragEvent, id: string) => void;
@@ -145,12 +236,6 @@ function ModuleListItem({
             </span>
           )}
         </div>
-        {!isBuiltIn && (
-          <button onClick={e => { e.stopPropagation(); onDelete(id); }}
-            className="p-0.5 text-gray-300 hover:text-red-500 shrink-0">
-            <Trash2 className="w-2.5 h-2.5" />
-          </button>
-        )}
       </button>
     </div>
   );
@@ -233,6 +318,15 @@ export default function ExtractPage() {
   const [progress, setProgress] = useState({ current: 0, total: 0, currentTitle: '' });
   const [plotPoints, setPlotPoints] = useState<ExtractedPlotPoint[]>([]);
   const [showResult, setShowResult] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  // ─── 导入配置弹窗 ───
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
+  const fileImportRef = useRef<HTMLInputElement>(null);
+  // ─── 删除确认弹窗 ───
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string>('');
   // 当前轮播显示的模块索引
   const [activeModuleIdx, setActiveModuleIdx] = useState(0);
 
@@ -251,7 +345,7 @@ export default function ExtractPage() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [form, setForm] = useState({ label: '', instruction: '', output: true });
+  const [form, setForm] = useState({ label: '', instruction: '', output: true, requires: [] as string[] });
 
   // ─── 拖拽状态 ───
   const [dragId, setDragId] = useState<string | null>(null);
@@ -286,6 +380,8 @@ export default function ExtractPage() {
   useEffect(() => {
     saveConfig({ outputMode, extractMode, chaptersPerBatch, pointsPerFile });
   }, [outputMode, extractMode, chaptersPerBatch, pointsPerFile]);
+
+
 
   
 
@@ -331,10 +427,10 @@ export default function ExtractPage() {
   const selectModule = (id: string) => {
     const mod = allModules[id]; if (!mod) return;
     setEditingId(id); setIsCreating(false);
-    setForm({ label: mod.label, instruction: mod.instruction, output: mod.output, key: mod.key });
+    setForm({ label: mod.label, instruction: mod.instruction, output: mod.output, key: mod.key, requires: mod.requires || [] });
   };
   const startCreate = () => {
-    setEditingId(null); setIsCreating(true); setForm({ label: '', instruction: '', output: true, key: '' });
+    setEditingId(null); setIsCreating(true); setForm({ label: '', instruction: '', output: true, key: '', requires: [] });
   };
   const handleSaveModule = () => {
     if (!form.label.trim() || !form.instruction.trim()) return;
@@ -349,9 +445,14 @@ export default function ExtractPage() {
   };
   const handleDeleteModule = (id: string) => {
     if (DEFAULT_MODULES[id]) return;
-    if (!confirm('确定删除这个模块吗？')) return;
-    deleteModule(id);
-    if (editingId === id) { setEditingId(null); setForm({ key: '', label: '', instruction: '', output: true }); }
+    setDeleteTargetId(id);
+    setShowDeleteConfirm(true);
+  };
+  const confirmDeleteModule = () => {
+    deleteModule(deleteTargetId);
+    if (editingId === deleteTargetId) { setEditingId(null); setForm({ key: '', label: '', instruction: '', output: true, requires: [] }); }
+    setShowDeleteConfirm(false);
+    setDeleteTargetId('');
   };
   const isBuiltIn = editingId ? !!DEFAULT_MODULES[editingId] : false;
 
@@ -372,20 +473,26 @@ export default function ExtractPage() {
     const signal = abortRef.current.signal;
 
     let chapters: ChapterItem[];
-    if (extractMode === 'chapter' || extractMode === 'multi') {
+    if (extractMode === 'chapter' || extractMode === 'multi' || extractMode === 'smart') {
       chapters = selectedFiles.flatMap(f => splitChapters(f.content, f.name));
     } else {
       chapters = selectedFiles.map(f => ({ title: f.name.replace('.txt', ''), content: f.content, fileName: f.name }));
     }
     let batches: ChapterItem[];
     if (extractMode === 'multi') {
+      // 每 X 章合并：固定步长切片
       batches = [];
-      const batchSize = Math.max(1, chaptersPerBatch);
-      for (let i = 0; i < chapters.length; i += batchSize) {
-        const batchChapters = chapters.slice(i, i + batchSize);
-        const mergedContent = batchChapters.map(c => `【${c.title}】\n${c.content}`).join('\n\n---\n\n');
-        batches.push({ title: batchChapters.map(c => c.title).join('、'), content: mergedContent, fileName: batchChapters[0].fileName });
+      const mergeCount = Math.max(2, chaptersPerBatch);
+      for (let i = 0; i < chapters.length; i += mergeCount) {
+        const groupChapters = chapters.slice(i, i + mergeCount);
+        const startCh = i + 1;
+        const endCh = i + groupChapters.length;
+        const mergedContent = groupChapters.map(c => `【${c.title}】\n${c.content}`).join('\n\n---\n\n');
+        batches.push({ title: `第${startCh}-${endCh}章`, content: mergedContent, fileName: groupChapters[0].fileName });
       }
+    } else if (extractMode === 'smart') {
+      // 智能弹性分组：按内容密度自动调整合并范围
+      batches = buildSmartBatches(chapters);
     } else { batches = chapters; }
 
     setProgress({ current: 0, total: batches.length, currentTitle: '' });
@@ -403,11 +510,21 @@ export default function ExtractPage() {
       try {
         const chapterText = batch.content.slice(0, 12000);
         const { systemPrompt, userPrompt } = buildPrompt(activeSystemKeys, activeOutputKeys, chapterText, allModules);
-        const result = await callModelAPI(`${systemPrompt}\n\n${userPrompt}`, selectedModel || undefined, signal);
-        const points = parseAiResponse(result);
-        if (points && points.length > 0) {
-          points.forEach(p => { if (!p._raw) (p as any)._chapter = batch.title; });
-          allPoints.push(...points);
+        // 清空流式输出 DOM
+        const streamEl = document.getElementById('extract-stream-output');
+        if (streamEl) streamEl.textContent = '';
+        const result = await callModelAPIStream(
+          `${systemPrompt}\n\n${userPrompt}`,
+          selectedModel || undefined,
+          signal
+        );
+        // 清理AI返回文本并拆分为单个剧情点
+        const cleaned = cleanAiResponse(result);
+        const segments = splitResults(cleaned);
+        if (segments.length > 0) {
+          segments.forEach(seg => {
+            allPoints.push({ _raw: seg, _chapter: batch.title } as ExtractedPlotPoint);
+          });
         }
         setPlotPoints([...allPoints]);
       } catch (err) {
@@ -420,6 +537,15 @@ export default function ExtractPage() {
     setActiveModuleIdx(0);
     abortRef.current = null;
     setIsProcessing(false); setIsAborting(false);
+
+    // ─── 提炼完成，自动保存到历史 ───
+    if (allPoints.length > 0) {
+      const fileNames = files.filter(f => f.selected).map(f => f.name);
+      const extractLabel = extractMode === 'chapter' ? '逐章' : extractMode === 'multi' ? `每${chaptersPerBatch}章合并` : '智能弹性';
+      const moduleLabels = [...activeSystemLabels, ...activeOutputLabels];
+      addHistory({ fileNames, moduleLabels, plotPointCount: allPoints.length, extractModeLabel: extractLabel, plotPoints: [...allPoints] });
+      setHistory(loadHistory());
+    }
   };
 
   // ─── 中止提炼 ───
@@ -431,52 +557,156 @@ export default function ExtractPage() {
   };
 
   // ─── 导出 ───
-  const handleExport = () => {
+  // 严格一文一档：每个剧情点 = 1个独立TXT
+  // 首选 showDirectoryPicker() 选择文件夹批量写入，fallback 逐个 download
+  const handleExport = async () => {
     if (plotPoints.length === 0) return;
-    let content = '';
-    const renderPoint = (point: ExtractedPlotPoint) => activeOutputKeys.map(k => {
-      const mod = allModules[k]; if (!mod) return '';
-      const v = (point as any)[mod.key];
-      return v && v !== '无' ? `## ${mod.label}\n${v}\n` : '';
-    }).filter(Boolean).join('\n');
 
-    if (outputMode === 'single') {
-      plotPoints.forEach((p, i) => { content += `=== 剧情点 ${i + 1} ===\n${renderPoint(p) || p._raw || ''}\n\n---\n\n`; });
-    } else if (outputMode === 'multi') {
-      for (let i = 0; i < plotPoints.length; i += pointsPerFile) {
-        const batch = plotPoints.slice(i, i + pointsPerFile);
-        content += `=== 第${Math.floor(i / pointsPerFile) + 1}批（${batch.length}条）===\n\n`;
-        batch.forEach((p, j) => { content += `【剧情点${i + j + 1}】\n${renderPoint(p) || p._raw || ''}\n\n---\n\n`; });
+    /**
+     * 生成文件内容：直接使用AI返回的Markdown文本
+     */
+    const renderContent = (point: ExtractedPlotPoint): string => {
+      return (point as any)._raw || '';
+    };
+
+    /**
+     * 生成唯一文件名
+     * 命名规范：【剧情卡】第X章.txt 或 【剧情卡】第X章_至_第Y章.txt
+     */
+    const buildFileName = (point: ExtractedPlotPoint, idx: number): string => {
+      const chapterInfo = (point as any)._chapter || '';
+      const rangeMatch = chapterInfo.match(/第(\d+)(?:[-–](\d+))?章/);
+      if (rangeMatch) {
+        const start = rangeMatch[1];
+        const end = rangeMatch[2];
+        return end
+          ? `【剧情卡】第${start}章_至_第${end}章_${idx + 1}.txt`
+          : `【剧情卡】第${start}章_${idx + 1}.txt`;
+      }
+      return `【剧情卡】剧情点_${idx + 1}.txt`;
+    };
+
+    // ═══ 方案A：File System Access API（选择文件夹 + 批量独立写入）═══
+    if ('showDirectoryPicker' in window) {
+      try {
+        const dirHandle = await (window as any).showDirectoryPicker();
+        let successCount = 0;
+        for (let i = 0; i < plotPoints.length; i++) {
+          const point = plotPoints[i];
+          const fileName = buildFileName(point, i);
+          const content = renderContent(point);
+          try {
+            const fileHandle = await dirHandle.getFileHandle(fileName, { create: true });
+            const writable = await fileHandle.createWritable();
+            await writable.write(content);
+            await writable.close();
+            successCount++;
+          } catch (err) {
+            console.error(`写入文件失败 ${fileName}:`, err);
+          }
+        }
+        alert(`导出完成：成功 ${successCount} / ${plotPoints.length} 个文件`);
+      } catch (err: any) {
+        if (err.name !== 'AbortError') {
+          console.error('选择文件夹失败:', err);
+          alert('选择文件夹失败，将使用备用导出方式');
+          fallbackExport(buildFileName, renderContent);
+        }
       }
     } else {
-      content = `=== 整本汇总（${plotPoints.length}条）===\n\n`;
-      plotPoints.forEach((p, i) => { content += `【剧情点${i + 1}】\n${renderPoint(p) || p._raw || ''}\n\n---\n\n`; });
+      // ═══ 方案B：浏览器不支持 File System Access API，fallback 逐个 download ═══
+      fallbackExport(buildFileName, renderContent);
     }
-    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    const modeText = outputMode === 'book' ? '整本' : outputMode === 'single' ? '逐条' : '批量';
-    a.href = url;
-    a.download = `剧情点_${modeText}_${plotPoints.length}条.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
 
-    // 保存到历史
+    // 导出时保存历史记录
     const fileNames = files.filter(f => f.selected).map(f => f.name);
-    
-    addHistory({ fileNames, moduleLabels, plotPointCount: plotPoints.length, outputMode: modeText });
+    const labels = [...activeSystemLabels, ...activeOutputLabels];
+    const extractLabel = extractMode === 'chapter' ? '逐章' : extractMode === 'multi' ? `每${chaptersPerBatch}章合并` : '智能弹性';
+    addHistory({ fileNames, moduleLabels: labels, plotPointCount: plotPoints.length, extractModeLabel: extractLabel, plotPoints });
     setHistory(loadHistory());
+  };
+
+  /**
+   * Fallback 导出：浏览器不支持 showDirectoryPicker 时使用逐个 download
+   */
+  const fallbackExport = (
+    buildFileName: (p: ExtractedPlotPoint, i: number) => string,
+    renderContent: (p: ExtractedPlotPoint) => string
+  ) => {
+    plotPoints.forEach((point, i) => {
+      const content = renderContent(point);
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = buildFileName(point, i);
+      setTimeout(() => { a.click(); URL.revokeObjectURL(url); }, i * 200);
+    });
   };
 
   return (
     <div className="h-full flex flex-col bg-gray-50">
       {/* 标题栏 */}
       <div className="px-4 py-2.5 bg-white border-b border-gray-200 shrink-0">
-        <div className="flex items-center gap-2">
-          <Sparkles className="w-5 h-5 text-brand" />
-          <div>
-            <h1 className="text-base font-bold text-gray-900">提炼剧情</h1>
-            <p className="text-[10px] text-gray-400">勾选模块 → 上传文件 → 配置 → AI提炼 → 导出</p>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-brand" />
+            <div>
+              <h1 className="text-base font-bold text-gray-900">提炼剧情</h1>
+              <p className="text-[10px] text-gray-400">勾选模块 → 上传文件 → 配置 → AI提炼 → 导出</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* 导出配置 */}
+            <button
+              onClick={() => {
+                const json = exportExtractConfig();
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `月下写作-提炼配置-${new Date().toLocaleDateString('zh-CN')}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="flex items-center gap-1 px-3 py-1.5 text-[11px] text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              title="将当前所有模块配置导出为文件，可在重新部署后导入恢复"
+            >
+              <FileText className="w-3 h-3" /> 导出配置
+            </button>
+            {/* 导入配置 */}
+            <button
+              onClick={() => { setShowImport(true); setImportText(''); setImportResult(null); }}
+              className="flex items-center gap-1 px-3 py-1.5 text-[11px] text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              title="从之前导出的配置文件恢复所有模块设置"
+            >
+              <FileText className="w-3 h-3" /> 导入配置
+            </button>
+            <input ref={fileImportRef} type="file" accept=".json"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = ev => {
+                  const text = String(ev.target?.result || '');
+                  setImportText(text);
+                  setImportResult(null);
+                  setShowImport(true);
+                };
+                reader.readAsText(file);
+                e.target.value = '';
+              }}
+              className="hidden"
+            />
+            <button
+              onClick={() => setShowHistory(true)}
+              className="flex items-center gap-1 px-3 py-1.5 text-[11px] text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              <FileText className="w-3 h-3" /> 提炼历史
+              {history.length > 0 && (
+                <span className="text-[9px] text-gray-400 ml-0.5">({history.length})</span>
+              )}
+            </button>
           </div>
         </div>
       </div>
@@ -507,7 +737,6 @@ export default function ExtractPage() {
                   key={id} id={id} mod={mod}
                   isActive={activeKeys.includes(id)} isSelected={isEditMode && editingId === id} Icon={Icon}
                   onToggleActive={toggleActive} onSelect={isEditMode ? selectModule : (mid: string) => { setIsEditMode(true); selectModule(mid); }}
-                  onDelete={handleDeleteModule}
                   dragId={dragId} dragOverId={dragOverId}
                   onDragStart={handleModDragStart} onDragOver={handleModDragOver}
                   onDragLeave={handleModDragLeave} onDrop={handleModDrop} allMods={allModules}
@@ -533,7 +762,6 @@ export default function ExtractPage() {
                   key={id} id={id} mod={mod}
                   isActive={activeKeys.includes(id)} isSelected={isEditMode && editingId === id} Icon={Icon}
                   onToggleActive={toggleActive} onSelect={isEditMode ? selectModule : (mid: string) => { setIsEditMode(true); selectModule(mid); }}
-                  onDelete={handleDeleteModule}
                   dragId={dragId} dragOverId={dragOverId}
                   onDragStart={handleModDragStart} onDragOver={handleModDragOver}
                   onDragLeave={handleModDragLeave} onDrop={handleModDrop} allMods={allModules}
@@ -541,14 +769,12 @@ export default function ExtractPage() {
               );
             })}
           </div>
-          {isEditMode && (
-            <div className="shrink-0 px-2.5 py-2 border-t border-gray-100">
-              <button onClick={startCreate}
-                className="w-full flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] text-brand bg-brand-light rounded hover:bg-brand-light/80 transition-colors">
-                <Plus className="w-3 h-3" /> 新建模块
-              </button>
-            </div>
-          )}
+          <div className="shrink-0 px-2.5 py-2 border-t border-gray-100">
+            <button onClick={() => { setIsEditMode(true); startCreate(); }}
+              className="w-full flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] text-brand bg-brand-light rounded hover:bg-brand-light/80 transition-colors">
+              <Plus className="w-3 h-3" /> 新建模块
+            </button>
+          </div>
           <div className="shrink-0 px-2.5 py-1.5 border-t border-gray-100 text-[10px] text-gray-400">
             {systemKeys.length + outputKeys.length} 模块 · {activeKeys.length} 已激活
           </div>
@@ -562,7 +788,7 @@ export default function ExtractPage() {
               <div className="shrink-0 flex items-center gap-2 mb-2">
                 <button
                   onClick={() => { setIsEditMode(false); setEditingId(null); setIsCreating(false); }}
-                  className="flex items-center gap-1 px-3 py-1.5 text-xs text-gray-500 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs text-white bg-brand rounded-md hover:bg-brand-dark transition-colors"
                 >
                   <ChevronLeft className="w-3 h-3" /> 返回
                 </button>
@@ -582,22 +808,7 @@ export default function ExtractPage() {
               ) : (
                 <div className="max-w-xl mx-auto">
                   <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-base font-bold text-gray-900">
-                        {isCreating ? '新建模块' : '编辑模块'}
-                      </h3>
-                      {!isCreating && isBuiltIn && isModified(editingId) && (
-                        <button onClick={() => {
-                          if (confirm('确定恢复为默认设置吗？')) {
-                            resetToDefault(editingId);
-                            const dm = DEFAULT_MODULES[editingId];
-                            if (dm) setForm({ key: dm.key, label: dm.label, instruction: dm.instruction });
-                          }
-                        }} className="flex items-center gap-1 text-xs text-red-600 hover:text-red-700">
-                          <RotateCcw className="w-3 h-3" /> 恢复默认
-                        </button>
-                      )}
-                    </div>
+                    <div className="mb-4" />
                     <div className="space-y-4">
                       {/* 显示名称 + JSON字段名 + 所属区域 */}
                       <div className="flex gap-4">
@@ -630,19 +841,56 @@ export default function ExtractPage() {
                         </div>
                       </div>
                       <div>
-                        <label className="text-xs text-gray-500 mb-1 block">提炼指令 <span className="text-red-400">*</span></label>
+                        <label className="text-xs text-gray-500 mb-1 block">提示词 <span className="text-red-400">*</span></label>
                         <textarea value={form.instruction}
                           onChange={e => setForm(f => ({ ...f, instruction: e.target.value }))}
-                          placeholder="告诉AI如何提炼这个维度的内容..." rows={8}
+                          placeholder="输入提示词，告诉AI如何处理这个维度..." rows={8}
                           className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-brand resize-none" />
                       </div>
+
+                      {/* 前置依赖配置 */}
+                      <div>
+                        <label className="text-xs text-gray-500 mb-1 block">前置依赖</label>
+                        <div className="text-[10px] text-gray-400 mb-1.5">勾选此模块需要先勾选哪些模块（自动级联勾选）</div>
+                        <div className="flex flex-wrap gap-2">
+                          {(() => {
+                            const candidates = (form.output ? outputKeys : systemKeys)
+                              .filter(k => k !== editingId && allModules[k]);
+                            if (candidates.length === 0) {
+                              return <span className="text-[10px] text-gray-400">暂无可选模块</span>;
+                            }
+                            return candidates.map(k => {
+                              const mod = allModules[k];
+                              const isChecked = form.requires.includes(k);
+                              return (
+                                <label key={k} className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded border cursor-pointer transition-colors ${isChecked ? 'border-brand bg-brand-light text-brand' : 'border-gray-200 text-gray-500 hover:border-gray-300'}`}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isChecked}
+                                    onChange={e => {
+                                      const next = e.target.checked
+                                        ? [...form.requires, k]
+                                        : form.requires.filter(r => r !== k);
+                                      setForm(f => ({ ...f, requires: next }));
+                                    }}
+                                    className="w-3 h-3 rounded border-gray-300 text-brand focus:ring-brand"
+                                  />
+                                  <span>{mod.label}</span>
+                                </label>
+                              );
+                            });
+                          })()}
+                        </div>
+                      </div>
+
                       <div className="flex items-center justify-between pt-2">
-                        {/* 左下角：删除按钮（仅编辑自定义模块时显示） */}
+                        {/* 左下角：删除按钮（所有模块都可删除） */}
                         <div>
-                          {!isCreating && editingId && !DEFAULT_MODULES[editingId] && (
+                          {!isCreating && editingId && (
                             <button onClick={() => {
-                              if (confirm('确定删除此模块吗？')) {
-                                handleDeleteModule(editingId);
+                              const label = allModules[editingId]?.label || '此模块';
+                              if (confirm(`确定删除「${label}」吗？${DEFAULT_MODULES[editingId] ? '（内置模块删除后将恢复默认）' : ''}`)) {
+                                deleteModule(editingId);
                                 setEditingId(null);
                                 setIsCreating(false);
                               }
@@ -708,11 +956,11 @@ export default function ExtractPage() {
                         <div className="text-[10px] text-gray-400">N章合并为一组</div>
                       </div>
                     </label>
-                    <label className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${extractMode === 'whole' ? 'border-brand bg-brand-light' : 'border-gray-200 hover:border-gray-300'}`}>
-                      <input type="radio" name="extractMode" value="whole" checked={extractMode === 'whole'} onChange={() => setExtractMode('whole')} className="w-3 h-3 text-brand" />
+                    <label className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${extractMode === 'smart' ? 'border-brand bg-brand-light' : 'border-gray-200 hover:border-gray-300'}`}>
+                      <input type="radio" name="extractMode" value="smart" checked={extractMode === 'smart'} onChange={() => setExtractMode('smart')} className="w-3 h-3 text-brand" />
                       <div>
-                        <div className={`text-xs font-medium ${extractMode === 'whole' ? 'text-brand' : 'text-gray-700'}`}>整本提炼</div>
-                        <div className="text-[10px] text-gray-400">整文件不分章</div>
+                        <div className={`text-xs font-medium ${extractMode === 'smart' ? 'text-brand' : 'text-gray-700'}`}>智能提炼</div>
+                        <div className="text-[10px] text-gray-400">AI智能弹性分组提炼</div>
                       </div>
                     </label>
                   </div>
@@ -765,7 +1013,7 @@ export default function ExtractPage() {
                           <div className="flex items-center gap-1.5 text-[9px] text-gray-500">
                             <span>{h.plotPointCount}条剧情点</span>
                             <span>·</span>
-                            <span>{h.outputMode}</span>
+                            <span className="text-brand">{h.extractModeLabel}</span>
                             <span>·</span>
                             <span className="truncate">{h.moduleLabels.slice(0, 3).join('、')}{h.moduleLabels.length > 3 ? '...' : ''}</span>
                           </div>
@@ -836,6 +1084,90 @@ export default function ExtractPage() {
         </div>
       </div>
 
+            {/* ═══════ 提炼历史弹窗 ═══════ */}
+      {showHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="w-[640px] max-h-[80vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
+            <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-brand" />
+                <h3 className="text-base font-bold text-gray-900">提炼历史</h3>
+                <span className="text-xs text-gray-400">({history.length} 条 · 最多保存 20 条)</span>
+              </div>
+              <button onClick={() => setShowHistory(false)}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {history.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                  <FileText className="w-10 h-10 mb-3 text-gray-200" />
+                  <p className="text-sm">暂无提炼记录</p>
+                </div>
+              ) : (
+                history.map((h, idx) => (
+                  <div key={h.id} className="border border-gray-100 rounded-lg overflow-hidden">
+                    {/* 头部 */}
+                    <div className="px-3 py-2 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-bold text-brand"># {idx + 1}</span>
+                        <span className="text-[11px] text-gray-500">
+                          {new Date(h.timestamp).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                        <span className="text-[10px] text-gray-400">{h.fileNames.slice(0, 2).join(', ')}{h.fileNames.length > 2 ? ` 等${h.fileNames.length}个` : ''}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-brand font-medium">{h.extractModeLabel}</span>
+                        <span className="text-[10px] text-gray-400">·</span>
+                        <span className="text-[10px] text-gray-500">{h.plotPointCount} 条剧情点</span>
+                        <button
+                          onClick={() => {
+                            const content = h.plotPoints.map((p: ExtractedPlotPoint, i: number) => {
+                              return `=== 剧情点 ${i + 1} ===\n${(p as any)._raw || ''}`;
+                            }).join('\n\n---\n\n');
+                            const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+                            const url = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = url;
+                            a.download = `剧情点_历史_${idx + 1}_${h.plotPointCount}条.txt`;
+                            a.click();
+                            URL.revokeObjectURL(url);
+                          }}
+                          className="text-[10px] text-brand hover:underline"
+                        >
+                          导出
+                        </button>
+                      </div>
+                    </div>
+                    {/* 剧情点内容 */}
+                    <div className="max-h-[200px] overflow-y-auto p-3 space-y-2">
+                      {h.plotPoints.slice(0, 5).map((p: ExtractedPlotPoint, i: number) => {
+                        return (
+                          <div key={i} className="border border-gray-50 rounded overflow-hidden">
+                            <div className="px-2 py-0.5 bg-brand-light/30 border-b border-gray-50">
+                              <span className="text-[9px] font-bold text-brand">剧情点 {i + 1}</span>
+                            </div>
+                            <div className="p-2 text-[11px] text-gray-700 whitespace-pre-wrap break-words leading-relaxed">
+                              {(p as any)._raw || ''}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {h.plotPoints.length > 5 && (
+                        <div className="text-center text-[10px] text-gray-400 py-1">
+                          ... 还有 {h.plotPoints.length - 5} 条 ...
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
             {/* ═══════ 确认提炼弹窗 ═══════ */}
       {showConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
@@ -852,11 +1184,16 @@ export default function ExtractPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Settings className="w-4 h-4 text-brand shrink-0" />
-                  <span>AI 模型：<strong className="text-gray-900">{models.find(m => m.id === selectedModel)?.name || '默认'}</strong></span>
+                  <span>AI 模型：<strong className="text-gray-900">{(() => {
+                    const effId = selectedModel || getDefaultModelId();
+                    const cfg = models.find(m => m.id === effId);
+                    if (!cfg) return effId || '未配置';
+                    return cfg.provider ? `${cfg.name}（${cfg.provider}）` : cfg.name;
+                  })()}</strong></span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Sparkles className="w-4 h-4 text-brand shrink-0" />
-                  <span>提炼模式：<strong className="text-gray-900">{extractMode === 'chapter' ? '逐章提炼' : extractMode === 'multi' ? `每${chaptersPerBatch}章合并提炼` : '整本提炼'}</strong></span>
+                  <span>提炼模式：<strong className="text-gray-900">{extractMode === 'chapter' ? '逐章提炼' : extractMode === 'multi' ? `每${chaptersPerBatch}章合并提炼` : '智能弹性提炼'}</strong></span>
                 </div>
                 <div className="flex items-center gap-2">
                   <Layers className="w-4 h-4 text-brand shrink-0" />
@@ -901,6 +1238,44 @@ export default function ExtractPage() {
         </div>
       )}
 
+      {/* ═══════ 删除确认弹窗 ═══════ */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="w-[400px] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-red-100 flex items-center justify-center">
+                  <Trash2 className="w-4 h-4 text-red-500" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">确认删除</h3>
+                  <p className="text-[11px] text-gray-400">此操作不可撤销</p>
+                </div>
+              </div>
+              <button onClick={() => setShowDeleteConfirm(false)}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="px-5 py-4">
+              <p className="text-sm text-gray-600">
+                确定要删除模块「<span className="font-medium text-gray-900">{allModules[deleteTargetId]?.label || '未知模块'}</span>」吗？删除后将无法恢复。
+              </p>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex justify-end gap-3">
+              <button onClick={() => setShowDeleteConfirm(false)}
+                className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                取消
+              </button>
+              <button onClick={confirmDeleteModule}
+                className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium text-white bg-red-500 rounded-lg hover:bg-red-600 transition-colors">
+                <Trash2 className="w-4 h-4" /> 确认删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ═══════ 提炼结果弹层 ═══════ */}
       {showResult && (
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-8 bg-black/30 backdrop-blur-sm">
@@ -929,6 +1304,19 @@ export default function ExtractPage() {
               <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
                 <div className="h-full bg-brand rounded-full transition-all" style={{ width: `${progress.total > 0 ? (progress.current / progress.total) * 100 : 0}%` }} />
               </div>
+              {/* ═══ 模型预览（最上面一行，始终显示）═══ */}
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50/80 border border-blue-100 rounded-md">
+                <Bot className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                <span className="text-[11px] text-blue-600 font-medium">正在使用模型：</span>
+                <span className="text-[11px] text-gray-800 font-semibold">{(() => {
+                  const effectiveModelId = selectedModel || getDefaultModelId();
+                  const cfg = getEnabledModels().find(m => m.id === effectiveModelId);
+                  if (!cfg) return effectiveModelId;
+                  return cfg.provider ? `${cfg.name}（${cfg.provider}）` : cfg.name;
+                })()}</span>
+                {isProcessing && <span className="text-[10px] text-blue-400 ml-1">· 提炼中</span>}
+              </div>
+
               {isProcessing && progress.currentTitle && (
                 <div className="flex items-center gap-1.5 mt-1.5 text-xs text-brand">
                   <Loader2 className="w-3 h-3 animate-spin" />
@@ -960,28 +1348,33 @@ export default function ExtractPage() {
                   </div>
                 </div>
               )}
+
+              {/* 流式输出实时显示 */}
+              <div className="mt-2 bg-gray-900 rounded-lg p-3 overflow-hidden" style={{ display: isProcessing ? 'block' : 'none' }}>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <Loader2 className="w-3 h-3 text-green-400 animate-spin" />
+                  <span className="text-[10px] text-green-400 font-medium">AI 实时输出中...</span>
+                </div>
+                <pre id="extract-stream-output" className="text-[11px] text-gray-300 whitespace-pre-wrap leading-relaxed max-h-[200px] overflow-y-auto font-mono min-h-[1em]">
+                  {' '}
+                </pre>
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-2">
               {plotPoints.length === 0 && !isProcessing && (
                 <div className="text-center text-gray-400 py-8">暂无提炼结果</div>
               )}
               {plotPoints.map((point, idx) => {
-                const sections: string[] = [];
-                // 只渲染 output !== false 的模块
-                for (const k of activeOutputKeys) {
-                  const mod = allModules[k]; if (!mod) continue;
-                  const v = (point as any)[mod.key];
-                  if (v && v !== '无' && v !== '无可提炼剧情点') sections.push(`## ${mod.label}\n${v}`);
-                }
-                if (sections.length === 0 && point._raw) sections.push(point._raw);
+                const content = (point as any)._raw || '';
+                const chapter = (point as any)._chapter || '';
                 return (
                   <div key={idx} className="border border-gray-100 rounded-lg overflow-hidden">
                     <div className="px-3 py-1.5 bg-brand-light border-b border-gray-100 flex items-center gap-2">
                       <span className="text-[10px] font-bold text-brand">剧情点 {idx + 1}</span>
-                      {(point as any)._chapter && <span className="text-[10px] text-gray-500 truncate">{(point as any)._chapter}</span>}
+                      {chapter && <span className="text-[10px] text-gray-500 truncate">{chapter}</span>}
                     </div>
-                    <div className="p-3 text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">
-                      {sections.map((s, si) => <div key={si} className="mb-2">{s}</div>)}
+                    <div className="p-3 text-[13px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words">
+                      {content}
                     </div>
                   </div>
                 );
@@ -996,6 +1389,84 @@ export default function ExtractPage() {
                   <FileText className="w-4 h-4" /> 导出 TXT
                 </button>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+            {/* ═══════ 导入配置弹窗 ═══════ */}
+      {showImport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="w-[520px] max-h-[80vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-gray-900">导入配置</h3>
+                <p className="text-[11px] text-gray-400 mt-0.5">从之前导出的 JSON 文件恢复所有模块设置</p>
+              </div>
+              <button onClick={() => setShowImport(false)}
+                className="p-1 text-gray-400 hover:text-gray-600 rounded">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+              {/* 方式一：粘贴 JSON */}
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">粘贴配置 JSON</label>
+                <textarea
+                  value={importText}
+                  onChange={e => { setImportText(e.target.value); setImportResult(null); }}
+                  placeholder='{"_exportVersion":1,...}'
+                  rows={6}
+                  className="w-full px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:border-brand resize-none font-mono"
+                />
+              </div>
+              {/* 方式二：选择文件 */}
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-400">或</span>
+                <button
+                  onClick={() => fileImportRef.current?.click()}
+                  className="flex items-center gap-1 px-3 py-1.5 text-xs text-brand border border-brand rounded-lg hover:bg-brand-light transition-colors"
+                >
+                  <FileText className="w-3 h-3" /> 选择 .json 文件
+                </button>
+              </div>
+              {/* 导入结果提示 */}
+              {importResult && (
+                <div className={`p-3 rounded-lg text-xs ${importResult.success ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
+                  {importResult.message}
+                </div>
+              )}
+              {/* 说明 */}
+              <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
+                <p className="text-[11px] text-amber-700">
+                  <strong>提示：</strong>导入配置后会覆盖当前所有模块设置。建议先导出当前配置作为备份。
+                  导入成功后需要<strong>刷新页面</strong>才能生效。
+                </p>
+              </div>
+            </div>
+            <div className="px-5 py-3 border-t border-gray-100 flex justify-end gap-3">
+              <button onClick={() => setShowImport(false)}
+                className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                取消
+              </button>
+              <button
+                onClick={() => {
+                  if (!importText.trim()) return;
+                  const result = importExtractConfig(importText.trim());
+                  setImportResult(result);
+                  if (result.success) {
+                    setTimeout(() => {
+                      if (confirm('配置导入成功！是否立即刷新页面以应用新配置？')) {
+                        window.location.reload();
+                      }
+                    }, 300);
+                  }
+                }}
+                disabled={!importText.trim()}
+                className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark disabled:opacity-50 transition-colors"
+              >
+                <Check className="w-4 h-4" /> 确认导入
+              </button>
             </div>
           </div>
         </div>

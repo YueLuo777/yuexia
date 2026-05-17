@@ -21,13 +21,15 @@ import WelcomeCard from './WelcomeCard';
 import StatsOverviewCard from './StatsOverviewCard';
 import RecentEditsCard from './RecentEditsCard';
 import PlaceholderCard from './PlaceholderCard';
+import ConfigBackupCard from './ConfigBackupCard';
 
 const STORAGE_KEY_LAYOUT = 'dashboard_layout';
-const LAYOUT_VERSION = 3;
+const LAYOUT_VERSION = 5;
 
 const defaultLayout: DashboardCardConfig[] = [
-  { id: 'welcome', type: 'welcome', size: 'medium', height: 'auto' },
-  { id: 'recent', type: 'recent', size: 'medium', height: 'auto' },
+  { id: 'welcome', type: 'welcome', size: 'third', height: 'auto' },
+  { id: 'config-backup', type: 'config-backup', size: 'third', height: 'auto' },
+  { id: 'recent', type: 'recent', size: 'third', height: 'auto' },
 ];
 
 function loadLayout(): DashboardCardConfig[] {
@@ -60,7 +62,7 @@ interface EditableDashboardProps {
 
 const availableCardTypes = [
   { type: 'welcome', label: '欢迎区', desc: '用户名 + 快捷按钮' },
-
+  { type: 'config-backup', label: '配置备份', desc: '导出/导入所有配置' },
   { type: 'invite', label: '推广数据', desc: '邀请统计 + 奖励' },
   { type: 'recent', label: '最近编辑', desc: '最近编辑的作品' },
   { type: 'placeholder', label: '预留位', desc: '空白占位' },
@@ -68,7 +70,7 @@ const availableCardTypes = [
 
 const cardTypeLabels: Record<string, string> = {
   welcome: '欢迎区',
-
+  'config-backup': '配置备份',
   invite: '推广数据',
   recent: '最近编辑',
   placeholder: '预留位',
@@ -168,6 +170,8 @@ export default function EditableDashboard({ onNewNovel }: EditableDashboardProps
         return <PlaceholderCard />;
       case 'recent':
         return <RecentEditsCard novels={novels} maxCount={4} />;
+      case 'config-backup':
+        return <ConfigBackupCard />;
       case 'placeholder':
         return <PlaceholderCard />;
       default:
@@ -178,8 +182,7 @@ export default function EditableDashboard({ onNewNovel }: EditableDashboardProps
   return (
     <main className="flex-1 overflow-y-auto p-6 relative">
       {/* 编辑模式切换按钮 */}
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-lg font-bold text-gray-900">工作台</h1>
+      <div className="flex items-center justify-end mb-4">
         <div className="flex items-center gap-2">
           {isEditMode && (
             <>

@@ -221,11 +221,11 @@ export default function ExtractModuleManage() {
                     </div>
                   </div>
 
-                  {/* 第二行：提炼指令 */}
+                  {/* 第二行：提示词 */}
                   <div>
-                    <label className="text-xs text-gray-500 mb-1 block">提炼指令 <span className="text-red-400">*</span></label>
+                    <label className="text-xs text-gray-500 mb-1 block">提示词 <span className="text-red-400">*</span></label>
                     <textarea value={form.instruction} onChange={e => setForm({ ...form, instruction: e.target.value })}
-                      placeholder="告诉AI如何提炼这个维度的内容..." rows={8}
+                      placeholder="输入提示词，告诉AI如何处理这个维度..." rows={8}
                       className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-brand resize-none" />
                   </div>
 

@@ -3,7 +3,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { GripVertical, Maximize2, Minimize2, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-export type CardSize = 'small' | 'medium' | 'large' | 'full';
+export type CardSize = 'small' | 'third' | 'medium' | 'large' | 'full';
 export type CardHeight = 'auto' | 'small' | 'medium' | 'large';
 
 export interface DashboardCardConfig {
@@ -15,6 +15,7 @@ export interface DashboardCardConfig {
 
 const sizeClasses: Record<CardSize, string> = {
   small: 'w-[20%]',
+  third: 'w-1/3',
   medium: 'w-1/2',
   large: 'w-[75%]',
   full: 'w-full',
@@ -22,20 +23,22 @@ const sizeClasses: Record<CardSize, string> = {
 
 const sizeLabels: Record<CardSize, string> = {
   small: '小',
+  third: '三等分',
   medium: '中',
   large: '大',
   full: '全宽',
 };
 
 const sizeNext: Record<CardSize, CardSize> = {
-  small: 'medium',
+  small: 'third',
+  third: 'medium',
   medium: 'large',
   large: 'full',
   full: 'small',
 };
 
 const heightClasses: Record<CardHeight, string> = {
-  auto: 'h-auto',
+  auto: '', // flex stretch 自动撑满
   small: 'h-[200px]',
   medium: 'h-[300px]',
   large: 'h-[400px]',

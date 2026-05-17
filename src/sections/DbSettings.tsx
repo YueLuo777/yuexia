@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from 'react';
 import {
-  Database, Download, Upload, Trash2, FileJson,
+  Database, Download, Upload, Trash2, FileJson, FolderOpen,
   CheckCircle, AlertTriangle, RefreshCw, HardDrive,
-  FolderOpen, ChevronDown, ChevronUp, Server,
+  ChevronDown, ChevronUp, Server,
 } from 'lucide-react';
 import { trpc } from '@/providers/trpc';
 

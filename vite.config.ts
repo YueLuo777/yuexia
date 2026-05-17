@@ -6,6 +6,11 @@ import { defineConfig } from "vite"
 
 // https://vite.dev/config/
 export default defineConfig({
+  esbuild: {
+    treeShaking: false,
+    minifySyntax: false,
+    minifyIdentifiers: false,
+  },
   plugins: [
     devServer({ entry: "api/boot.ts", exclude: [/^\/(?!api\/).*$/] }),
     react(),
@@ -45,5 +50,19 @@ export default defineConfig({
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
+    rollupOptions: {
+      treeshake: false,
+    },
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        dead_code: false,
+        unused: false,
+        pure_funcs: [],
+        booleans_as_integers: false,
+        passes: 1,
+      },
+      mangle: true,
+    },
   },
 });
