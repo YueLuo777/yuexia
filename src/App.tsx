@@ -15,6 +15,7 @@ import IdeaLibrary from './sections/IdeaLibrary';
 import CallDataPage from './sections/CallDataPage';
 import TagZone from './sections/TagZone';
 import ExtractPage from './sections/ExtractPage';
+import PlotLibrary from './sections/PlotLibrary';
 import Dashboard from './pages/Dashboard';
 
 function App() {
@@ -44,6 +45,7 @@ function App() {
           <Route path="/idea-library" element={<IdeaLibrary />} />
           <Route path="/tag-zone" element={<TagZone />} />
           <Route path="/extract" element={<ExtractPage />} />
+          <Route path="/plot-library" element={<PlotLibrary />} />
         </Route>
 
         {/* 未匹配路由重定向 */}

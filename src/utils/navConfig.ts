@@ -5,12 +5,12 @@
 import {
   User, LayoutGrid, BookOpen, FileText, Film, Database, Users,
   Settings, FolderOpen, FlaskConical, Lightbulb, ListTree, Library,
-  Activity, Tag, Sparkles, Cloud, Palette,
+  Activity, Tag, Sparkles, Cloud, Palette, Star,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 export const iconMap: Record<string, LucideIcon> = {
-  User, LayoutGrid, BookOpen, FileText, Film, Database, Users, Settings, FolderOpen, FlaskConical, Lightbulb, ListTree, Library, Activity, Tag, Sparkles, Cloud, Palette,
+  User, LayoutGrid, BookOpen, FileText, Film, Database, Users, Settings, FolderOpen, FlaskConical, Lightbulb, ListTree, Library, Activity, Tag, Sparkles, Cloud, Palette, Star,
 };
 
 export function getIconByName(name: string): LucideIcon {
@@ -32,32 +32,40 @@ export interface NavGroupConfig {
   items: NavItemConfig[];
 }
 
-// ── 默认导航配置（优化布局：分布均匀） ──
+// ── 默认导航配置（按专区分组） ──
 export const DEFAULT_NAV_CONFIG: NavGroupConfig[] = [
   {
-    title: '常用',
+    title: '首页专区',
     iconName: 'LayoutGrid',
     hidden: false,
     items: [
       { iconName: 'LayoutGrid', label: '首页', to: '/dashboard' },
-      { iconName: 'BookOpen', label: '我的小说', to: '/novels' },
-      { iconName: 'Film', label: '我的剧本', to: '/scripts' },
-      { iconName: 'Sparkles', label: '提炼剧情', to: '/extract' },
     ],
   },
   {
-    title: '数据库',
+    title: '创作专区',
+    iconName: 'BookOpen',
+    hidden: false,
+    items: [
+      { iconName: 'BookOpen', label: '我的小说', to: '/novels' },
+      { iconName: 'Film', label: '我的剧本', to: '/scripts' },
+      { iconName: 'Sparkles', label: '提炼剧情', to: '/extract' },
+      { iconName: 'Star', label: '剧情库', to: '/plot-library' },
+    ],
+  },
+  {
+    title: '数据专区',
     iconName: 'Database',
     hidden: false,
     items: [
       { iconName: 'Database', label: '资料库', to: '/materials' },
       { iconName: 'Tag', label: '提示词管理', to: '/prompts' },
-      { iconName: 'Cloud', label: '云端设置', to: '/db-settings' },
       { iconName: 'Settings', label: '模型管理', to: '/model-manage' },
+      { iconName: 'Cloud', label: '云端设置', to: '/db-settings' },
     ],
   },
   {
-    title: '工具箱',
+    title: '功能专区',
     iconName: 'Lightbulb',
     hidden: false,
     items: [
@@ -67,7 +75,7 @@ export const DEFAULT_NAV_CONFIG: NavGroupConfig[] = [
     ],
   },
   {
-    title: '测试',
+    title: '测试专区',
     iconName: 'FlaskConical',
     hidden: true,
     items: [
@@ -78,7 +86,7 @@ export const DEFAULT_NAV_CONFIG: NavGroupConfig[] = [
 ];
 
 // 递增版本号强制刷新旧缓存
-const NAV_CONFIG_KEY = 'nav_config_v43';
+const NAV_CONFIG_KEY = 'nav_config_v44';
 
 function isValidNavConfig(config: unknown): config is NavGroupConfig[] {
   if (!Array.isArray(config)) return false;
@@ -98,7 +106,7 @@ function isValidNavConfig(config: unknown): config is NavGroupConfig[] {
 }
 
 const NAV_CONFIG_VERSION_KEY = 'nav_config_version';
-const CURRENT_NAV_VERSION = 'v43';
+const CURRENT_NAV_VERSION = 'v44';
 
 export function loadNavConfig(): NavGroupConfig[] {
   try {

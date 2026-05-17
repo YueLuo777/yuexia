@@ -82,7 +82,7 @@ export async function callModelAPIStream(
   content: string,
   modelId?: string,
   signal?: AbortSignal,
-  onChunk?: (text: string, isDone: boolean) => void
+  onChunk?: (delta: string, accumulated: string, isDone: boolean) => void
 ): Promise<string> {
   try {
     const raw = localStorage.getItem('api_settings_v2');
@@ -126,12 +126,13 @@ export async function callModelAPIStream(
 
 /**
  * 流式读取响应内容
- * 将数据写入 DOM 元素 #extract-stream-output（如果存在）
+ * 通过 onChunk 回调传递增量文本（delta）和累积文本（accumulated）
+ * 调用方负责实时显示，不再硬编码写入DOM
  * 返回前进行文本清理（去除 ## # 等叠加标题）
  */
 async function readStreamChunks(
   response: Response,
-  onChunk?: (text: string, isDone: boolean) => void
+  onChunk?: (delta: string, accumulated: string, isDone: boolean) => void
 ): Promise<string> {
   const reader = response.body!.getReader();
   const decoder = new TextDecoder();
@@ -159,11 +160,8 @@ async function readStreamChunks(
 
           if (content) {
             fullText += content;
-            // 写入 DOM（显示原始文本，流式效果更自然）
-            const el = document.getElementById('extract-stream-output');
-            if (el) el.textContent = fullText;
-            // 回调
-            if (onChunk) onChunk(fullText, false);
+            // 回调：传递增量文本 + 累积文本
+            if (onChunk) onChunk(content, fullText, false);
           }
         } catch { /* ignore parse errors */ }
       }
@@ -174,7 +172,7 @@ async function readStreamChunks(
 
   // 返回前清理文本格式
   const cleaned = cleanStreamText(fullText);
-  if (onChunk) onChunk(cleaned, true);
+  if (onChunk) onChunk('', cleaned, true);
   return cleaned;
 }
 
