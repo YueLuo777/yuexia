@@ -1,9 +1,43 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import {
   Sparkles, FileText, Settings, Play, Check, X, Loader2,
-  Layers, Link, TrendingUp, LayoutGrid, Hash, Star, Zap,
-  GripVertical, Plus, Trash2, ChevronLeft, Bot, Library,
+  Layers, Link, TrendingUp, LayoutGrid, Hash, Zap,
+  Lock, LockOpen, GripVertical,
+  Plus, Trash2, ChevronLeft, ChevronDown, Bot, Library,
+  Star, BookOpen, GitBranch, Lightbulb, Tag, Trophy,
+  Users, MapPin, Eye, Timer,
 } from 'lucide-react';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+// ─── CSS 动画关键帧 ───
+const FADE_IN_CSS = `
+@keyframes fadeInSlide {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeIn {
+  animation: fadeInSlide 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.animate-fadeIn > * {
+  animation: fadeInSlide 280ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+`;
 import { getEnabledModels, getDefaultModelId, callModelAPI, callModelAPIStream } from '@/lib/ai';
 
 import { useExtractModules, DEFAULT_MODULES, exportExtractConfig, importExtractConfig } from '@/hooks/useExtractModules';
@@ -19,6 +53,7 @@ const HISTORY_KEY = 'extract_history_v1';
 type ExtractMode = 'chapter' | 'multi' | 'smart';
 
 const CONFIG_KEY = 'extract_config_v1';
+const GROUP_SIZE = 50;
 
 interface SavedConfig {
   outputMode: 'single' | 'multi' | 'book';
@@ -133,6 +168,73 @@ function buildSmartBatches(chapters: ChapterItem[]): ChapterItem[] {
   return batches;
 }
 
+// ═══════════════════════════════════════════════════════════
+//  AI 返回内容的 Markdown 子区块解析 + 图标系统
+// ═══════════════════════════════════════════════════════════
+
+interface ContentBlock {
+  title: string;
+  body: string;
+  icon: typeof Layers;
+  color: string;
+  bgColor: string;
+}
+
+/** 模块标题 → 图标 + 颜色映射 */
+const BLOCK_ICON_MAP: Record<string, { icon: typeof Layers; color: string; bgColor: string }> = {
+  '评分': { icon: Star, color: 'text-amber-600', bgColor: 'bg-amber-50' },
+  '平均分': { icon: Star, color: 'text-amber-600', bgColor: 'bg-amber-50' },
+  '剧情': { icon: BookOpen, color: 'text-sky-600', bgColor: 'bg-sky-50' },
+  '剧情梗概': { icon: BookOpen, color: 'text-sky-600', bgColor: 'bg-sky-50' },
+  '因果逻辑': { icon: GitBranch, color: 'text-violet-600', bgColor: 'bg-violet-50' },
+  '状态增量': { icon: TrendingUp, color: 'text-emerald-600', bgColor: 'bg-emerald-50' },
+  '后续构思': { icon: Lightbulb, color: 'text-orange-600', bgColor: 'bg-orange-50' },
+  '主题标签': { icon: Tag, color: 'text-pink-600', bgColor: 'bg-pink-50' },
+  '剧情点标签': { icon: Tag, color: 'text-pink-600', bgColor: 'bg-pink-50' },
+  '黄金三章评估': { icon: Trophy, color: 'text-yellow-600', bgColor: 'bg-yellow-50' },
+  '人物': { icon: Users, color: 'text-indigo-600', bgColor: 'bg-indigo-50' },
+  '场景': { icon: MapPin, color: 'text-teal-600', bgColor: 'bg-teal-50' },
+  '冲突': { icon: Zap, color: 'text-red-600', bgColor: 'bg-red-50' },
+  '伏笔': { icon: Eye, color: 'text-cyan-600', bgColor: 'bg-cyan-50' },
+  '节奏': { icon: Timer, color: 'text-lime-600', bgColor: 'bg-lime-50' },
+};
+
+const DEFAULT_BLOCK_STYLE = { icon: FileText, color: 'text-slate-500', bgColor: 'bg-slate-50' };
+
+/** 将AI返回的 Markdown 文本按 #标题 拆分为子区块 */
+function parseContentBlocks(text: string): ContentBlock[] {
+  if (!text.trim()) return [];
+  const lines = text.split('\n');
+  const blocks: ContentBlock[] = [];
+  let currentTitle = '';
+  let currentBody: string[] = [];
+
+  const flushBlock = () => {
+    if (currentTitle || currentBody.length > 0) {
+      const title = currentTitle || '内容';
+      const style = BLOCK_ICON_MAP[title] || DEFAULT_BLOCK_STYLE;
+      blocks.push({ title, body: currentBody.join('\n').trim(), icon: style.icon, color: style.color, bgColor: style.bgColor });
+    }
+    currentBody = [];
+  };
+
+  for (const line of lines) {
+    const hMatch = line.match(/^#{1,2}\s*(.+)/);
+    if (hMatch) {
+      flushBlock();
+      currentTitle = hMatch[1].trim();
+    } else {
+      currentBody.push(line);
+    }
+  }
+  flushBlock();
+  if (blocks.length === 0 && text.trim()) {
+    const s = DEFAULT_BLOCK_STYLE;
+    blocks.push({ title: '内容', body: text.trim(), icon: s.icon, color: s.color, bgColor: s.bgColor });
+  }
+  return blocks;
+}
+
 /** 估计章节内容密度 */
 function estimateDensity(text: string): 'low' | 'medium' | 'high' {
   const t = text.trim();
@@ -185,64 +287,192 @@ function addHistory(record: Omit<HistoryRecord, 'id' | 'timestamp'>) {
   return newRecord;
 }
 
-// ─── 左栏模块列表项 ───
-function ModuleListItem({
-  id, mod, isActive, isSelected, Icon,
-  onToggleActive, onSelect,
-  dragId, dragOverId, onDragStart, onDragOver, onDragLeave, onDrop,
-  allMods,
-}: {
-  id: string; mod: { label: string; requires?: string[] }; isActive: boolean; isSelected: boolean; Icon: typeof Layers;
-  onToggleActive: (id: string) => void; onSelect: (id: string) => void;
-  dragId: string | null; dragOverId: string | null;
-  onDragStart: (id: string) => void; onDragOver: (e: React.DragEvent, id: string) => void;
-  onDragLeave: () => void; onDrop: (e: React.DragEvent, id: string) => void;
-  allMods: Record<string, { label: string }>;
-}) {
-  const isBuiltIn = !!DEFAULT_MODULES[id];
-  const isDragOver = dragOverId === id;
-  const hasPrereqs = mod.requires && mod.requires.length > 0;
+// ─── 右侧详情卡片（卡片化 + 子卡片 + 图标 + 淡入动画） ───
+function DetailCard({ point, activeIdx }: { point: ExtractedPlotPoint; activeIdx: number }) {
+  const content = (point as any)._raw || '';
+  const chapter = (point as any)._chapter || '';
+  const blocks = useMemo(() => parseContentBlocks(content), [content]);
+  const [animKey, setAnimKey] = useState(0);
+
+  // 切换剧情点时触发淡入动画
+  useEffect(() => { setAnimKey(k => k + 1); }, [activeIdx]);
+
   return (
-    <div
-      draggable
-      onDragStart={(e) => { e.dataTransfer.effectAllowed = 'move'; onDragStart(id); }}
-      onDragOver={e => onDragOver(e, id)}
-      onDragLeave={onDragLeave}
-      onDrop={e => onDrop(e, id)}
-      className={`border-b border-gray-50 transition-all duration-100 ${
-        isDragOver
-          ? 'bg-blue-100/60 border-t-2 border-t-blue-400'
-          : dragId === id
-          ? 'opacity-50'
-          : ''
-      }`}
-    >
-      <button onClick={() => onSelect(id)}
-        className={`w-full flex items-center gap-1.5 px-2.5 py-1.5 text-left transition-colors ${isSelected ? 'bg-brand-light/70' : 'hover:bg-gray-50'}`}>
-        {/* 拖拽手柄 - 增大热区 */}
-        <div className="p-1 -ml-1 shrink-0 cursor-grab active:cursor-grabbing" draggable onDragStart={(e) => { e.stopPropagation(); e.dataTransfer.effectAllowed = 'move'; onDragStart(id); }}>
-          <GripVertical className="w-3 h-3 text-gray-300" />
+    <div className="animate-fadeIn flex flex-col flex-1 min-h-0" key={animKey}>
+      {/* 外层主卡片（填满高度） */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
+        {/* 标题栏 */}
+        <div className="shrink-0 px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className="w-6 h-6 rounded-lg bg-sky-500 flex items-center justify-center text-white text-[11px] font-bold shadow-sm">
+              {activeIdx + 1}
+            </div>
+            <div>
+              <span className="text-sm font-bold text-slate-800">剧情点 {activeIdx + 1}</span>
+              {chapter && <span className="ml-2 text-xs text-slate-500">{chapter}</span>}
+            </div>
+          </div>
+          <span className="ml-auto text-[11px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+            {content.length} 字
+          </span>
         </div>
-        <div onClick={e => { e.stopPropagation(); onToggleActive(id); }}
-          className={`w-3 h-3 rounded-sm border flex items-center justify-center shrink-0 cursor-pointer transition-colors ${isActive ? 'bg-brand border-brand' : 'border-gray-300 hover:border-brand'}`}>
-          {isActive && <Check className="w-2 h-2 text-white" />}
+
+        {/* 内容区：纯文本输出，无子卡片边框 */}
+        <div className="flex-1 overflow-y-auto min-h-0 p-5 text-[14px] text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
+          {content || <span className="text-slate-300 italic">暂无内容</span>}
         </div>
-        <Icon className={`w-3 h-3 shrink-0 ${isActive ? 'text-brand' : 'text-gray-400'}`} />
-        <div className="flex-1 min-w-0 flex items-center gap-1">
-          <span className={`text-xs truncate ${isSelected ? 'text-brand font-medium' : 'text-gray-700'}`}>{mod.label}</span>
-          {/* 前置依赖标签 */}
-          {hasPrereqs && (
-            <span className="text-[8px] px-1 py-0.5 bg-amber-50 text-amber-600 rounded shrink-0" title={`需要先勾选：${mod.requires!.map(r => allMods[r]?.label).filter(Boolean).join('、')}`}>
-              需{mod.requires!.map(r => allMods[r]?.label).filter(Boolean).join(',')}
-            </span>
-          )}
-        </div>
-      </button>
+      </div>
     </div>
   );
 }
 
-// ─── 组合预览内容（复用组件） ───
+// ─── Master-Detail 左侧紧凑数字格子（一行5个） ───
+function MasterList({
+  plotPoints, activeIdx, onSelect, lastImportedIdx, isProcessing,
+}: {
+  plotPoints: ExtractedPlotPoint[]; activeIdx: number; onSelect: (idx: number) => void;
+  lastImportedIdx: number; isProcessing: boolean;
+}) {
+  const listRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!listRef.current) return;
+    const el = listRef.current.querySelector(`[data-idx="${activeIdx}"]`);
+    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [activeIdx]);
+
+  return (
+    <div className="flex flex-col h-full bg-slate-50">
+      {/* 头部 */}
+      <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between shrink-0 bg-white">
+        <span className="text-[10px] font-bold text-slate-500">目录</span>
+        <span className="text-[9px] text-slate-400">{plotPoints.length}</span>
+      </div>
+      {/* 紧凑数字网格 */}
+      <div ref={listRef} className="flex-1 overflow-y-auto p-2">
+        {plotPoints.length === 0 && (
+          <div className="text-center py-4 text-slate-300 text-[10px]">暂无</div>
+        )}
+        <div className="grid grid-cols-5 gap-1">
+          {plotPoints.map((point, idx) => {
+            const chapter = (point as any)._chapter || '';
+            const isActive = activeIdx === idx;
+            const isImported = idx <= lastImportedIdx;
+            const isStreaming = isProcessing && idx === plotPoints.length - 1;
+
+            return (
+              <button
+                key={idx}
+                data-idx={idx}
+                onClick={() => onSelect(idx)}
+                title={chapter || `剧情点 ${idx + 1}`}
+                className={`h-8 rounded-md flex items-center justify-center text-[11px] font-bold transition-all ${
+                  isActive
+                    ? 'bg-sky-500 text-white shadow-sm'
+                    : isImported
+                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                    : 'bg-white text-slate-500 border border-slate-150 hover:border-slate-300 hover:text-slate-700'
+                } ${isStreaming ? 'ring-2 ring-emerald-400 ring-offset-1' : ''}`}
+              >
+                {idx + 1}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 可拖拽模块列表项（长按触发拖拽，无需手柄） ───
+function SortableModuleItem({
+  id, mod, isActive, isSelected, isLocked, Icon,
+  onToggleActive, onSelect, onToggleLock,
+  allMods,
+}: {
+  id: string; mod: { label: string; requires?: string[] }; isActive: boolean; isSelected: boolean; isLocked: boolean; Icon: typeof Layers;
+  onToggleActive: (id: string) => void; onSelect: (id: string) => void; onToggleLock: (id: string) => void;
+  allMods: Record<string, { label: string }>;
+}) {
+  const {
+    attributes, listeners, setNodeRef, transform, transition, isDragging,
+  } = useSortable({ id, disabled: isLocked });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 50 : undefined,
+    position: 'relative' as const,
+  };
+
+  const hasPrereqs = mod.requires && mod.requires.length > 0;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`group border-b border-gray-50 transition-all duration-100 select-none ${
+        isDragging ? 'opacity-60 shadow-lg ring-2 ring-brand/30 bg-white rounded z-50' : ''
+      }`}
+    >
+      <div className={`w-full flex items-center text-left transition-colors ${
+          isSelected ? 'bg-brand-light/70' : 'hover:bg-gray-50'
+        }`}>
+        {/* ═══ 拖拽手柄：左侧窄条（只有这里支持长按拖拽）═══ */}
+        {!isLocked && (
+          <div
+            {...attributes}
+            {...listeners}
+            className="shrink-0 w-4 flex items-center justify-center self-stretch cursor-grab active:cursor-grabbing rounded-l hover:bg-gray-200/60"
+            title="长按拖拽排序"
+          >
+            <GripVertical className="w-3 h-3 text-gray-300" />
+          </div>
+        )}
+        {isLocked && <div className="shrink-0 w-4" />}
+
+        {/* 模块主体（点击进入编辑，不受拖拽干扰） */}
+        <button
+          onClick={() => onSelect(id)}
+          className="flex-1 min-w-0 flex items-center gap-1.5 py-1.5 pr-1 text-left"
+        >
+          {/* 勾选框 */}
+          <div onClick={e => { e.stopPropagation(); if (!isLocked) onToggleActive(id); }}
+            className={`w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors ${
+              isLocked ? 'bg-amber-400 border-amber-400 cursor-not-allowed' :
+              isActive ? 'bg-brand border-brand cursor-pointer' : 'border-gray-300 hover:border-brand cursor-pointer'
+            }`}>
+            {(isActive || isLocked) && <Check className="w-2.5 h-2.5 text-white" strokeWidth={3} />}
+          </div>
+          <Icon className={`w-3 h-3 shrink-0 ${isActive ? 'text-brand' : 'text-gray-400'}`} />
+          <div className="flex-1 min-w-0 flex items-center gap-1">
+            <span className={`text-xs truncate ${isSelected ? 'text-brand font-medium' : 'text-gray-700'}`}>{mod.label}</span>
+            {hasPrereqs && (
+              <span className="text-[8px] px-1 py-0.5 bg-amber-50 text-amber-600 rounded shrink-0" title={`需要先勾选：${mod.requires!.map(r => allMods[r]?.label).filter(Boolean).join('、')}`}>
+                需{mod.requires!.map(r => allMods[r]?.label).filter(Boolean).join(',')}
+              </span>
+            )}
+          </div>
+        </button>
+
+        {/* 锁定按钮 */}
+        <div
+          onClick={e => { e.stopPropagation(); onToggleLock(id); }}
+          className={`shrink-0 p-0.5 mr-1 rounded transition-colors opacity-0 group-hover:opacity-100 ${
+            isLocked
+              ? 'text-amber-500 hover:text-amber-600 hover:bg-amber-50'
+              : 'text-gray-300 hover:text-amber-500 hover:bg-amber-50/50'
+          }`}
+          title={isLocked ? '已锁定（默认勾选，无法取消）' : '点击锁定'}
+        >
+          {isLocked ? <Lock className="w-3 h-3" /> : <LockOpen className="w-3 h-3" />}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 模块预览（带折叠功能） ───
 function PreviewPanel({
   systemKeys, outputKeys, allModules,
 }: {
@@ -250,40 +480,54 @@ function PreviewPanel({
   outputKeys: string[];
   allModules: Record<string, { key: string; label: string; instruction: string; output?: boolean }>;
 }) {
+  // 从 localStorage 读取折叠状态
+  const loadCollapsed = (): Set<string> => {
+    try {
+      const raw = localStorage.getItem('preview_collapsed_v1');
+      if (raw) return new Set(JSON.parse(raw));
+    } catch { /* */ }
+    return new Set();
+  };
+
+  const [collapsed, setCollapsed] = useState<Set<string>>(loadCollapsed);
+
+  const toggle = (key: string) => {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      // 保存到 localStorage
+      try { localStorage.setItem('preview_collapsed_v1', JSON.stringify([...next])); } catch { /* */ }
+      return next;
+    });
+  };
+
+  const renderModule = (key: string, isOutput: boolean) => {
+    const mod = allModules[key]; if (!mod) return null;
+    const isCollapsed = collapsed.has(key);
+    return (
+      <div key={key} className="border border-gray-100 rounded-lg overflow-hidden">
+        <button
+          onClick={() => toggle(key)}
+          className={`w-full flex items-center justify-between px-3 py-2 text-left transition-colors ${
+            isOutput ? 'bg-brand-light' : 'bg-red-50'
+          } hover:opacity-80`}
+        >
+          <span className={`text-sm font-bold ${isOutput ? 'text-brand' : 'text-red-600'}`}>{mod.label}</span>
+          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+        </button>
+        {!isCollapsed && (
+          <div className="px-3 py-2 text-[11px] text-gray-600 whitespace-pre-wrap leading-relaxed">
+            {mod.instruction}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
-    <div className="space-y-4">
-      {/* 系统指令区 */}
-      {systemKeys.length > 0 && (
-        <div className="space-y-3 pb-3 border-b border-dashed border-gray-200">
-          <div className="text-[10px] font-bold text-red-600 uppercase tracking-wider">系统指令</div>
-          {systemKeys.map(k => {
-            const mod = allModules[k]; if (!mod) return null;
-            return (
-              <div key={k}>
-                <div className="text-[15px] font-bold text-gray-900 mb-1">{mod.label}</div>
-                <div className="text-[11px] text-gray-600 whitespace-pre-wrap leading-relaxed">{mod.instruction}</div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* 输出模块区 */}
-      {outputKeys.length > 0 && (
-        <div className="space-y-3">
-          <div className="text-[10px] font-bold text-brand uppercase tracking-wider">输出模块</div>
-          {outputKeys.map(k => {
-            const mod = allModules[k]; if (!mod) return null;
-            return (
-              <div key={k}>
-                <div className="text-[15px] font-bold text-gray-900 mb-1">{mod.label}</div>
-                <div className="text-[11px] text-gray-600 whitespace-pre-wrap leading-relaxed">{mod.instruction}</div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
+    <div className="space-y-2">
+      {systemKeys.map(k => renderModule(k, false))}
+      {outputKeys.map(k => renderModule(k, true))}
       {systemKeys.length === 0 && outputKeys.length === 0 && (
         <div className="h-full flex items-center justify-center text-gray-400 text-xs">
           未选择模块，无法生成预览
@@ -307,10 +551,6 @@ export default function ExtractPage() {
   const [extractMode, setExtractMode] = useState<ExtractMode>(savedCfg.extractMode);
   const [chaptersPerBatch, setChaptersPerBatch] = useState(savedCfg.chaptersPerBatch);
   const [selectedModel, setSelectedModel] = useState('');
-  // 流式传输开关
-  const [streamEnabled, setStreamEnabled] = useState(() => {
-    try { return localStorage.getItem('extract_stream_enabled') !== 'false'; } catch { return true; }
-  });
   const [history, setHistory] = useState<HistoryRecord[]>(loadHistory);
 
   // ─── 确认提炼弹窗 ───
@@ -322,6 +562,12 @@ export default function ExtractPage() {
   const abortRef = useRef<AbortController | null>(null);
   const [progress, setProgress] = useState({ current: 0, total: 0, currentTitle: '' });
   const [plotPoints, setPlotPoints] = useState<ExtractedPlotPoint[]>([]);
+  // Master-Detail 模式：当前选中的剧情点索引（海量数据时使用）
+  const [activeIdx, setActiveIdx] = useState(0);
+  // 中途断点导入游标：记录上次导入到第几个剧情点
+  const [lastImportedIdx, setLastImportedIdx] = useState(() => {
+    try { return parseInt(localStorage.getItem('extract_last_imported_idx') || '0', 10); } catch { return 0; }
+  });
   const [showResult, setShowResult] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   // ─── 导入配置弹窗 ───
@@ -344,6 +590,15 @@ export default function ExtractPage() {
     addModule, updateModule, deleteModule, toggleActive,
     reorderSystem, reorderOutput, moveToZone, resetToDefault, isModified,
   } = useExtractModules();
+
+  // ─── @dnd-kit 拖拽传感器（长按 150ms 触发，专门手柄区域） ───
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { delay: 150, tolerance: 5 },
+    }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
   const activeSystemKeys = systemKeys.filter(k => activeKeys.includes(k));
   const activeOutputKeys = outputKeys.filter(k => activeKeys.includes(k));
   const activeSystemLabels = activeSystemKeys.map(k => allModules[k]?.label).filter(Boolean);
@@ -355,29 +610,17 @@ export default function ExtractPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [form, setForm] = useState({ label: '', instruction: '', output: true, requires: [] as string[] });
 
-  // ─── 拖拽状态 ───
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
-  const [dragOverZone, setDragOverZone] = useState<'system' | 'output' | null>(null);
-
-  // ─── 跨区拖拽 ───
-  const handleDropOnZone = (e: React.DragEvent, zone: 'system' | 'output') => {
-    e.preventDefault();
-    if (!dragId) return;
-    const targetOutput = zone === 'output';
-    const currentMod = allModules[dragId];
-    if (!currentMod) return;
-    if (currentMod.output !== targetOutput) {
-      // 跨区移动：切换 output 字段
-      moveToZone(dragId, targetOutput);
-    } else {
-      // 同区内排序
-      if (dragId !== dragOverId && dragOverId) {
-        if (zone === 'system') reorderSystem(dragId, dragOverId);
-        else reorderOutput(dragId, dragOverId);
-      }
-    }
-    setDragId(null); setDragOverId(null); setDragOverZone(null);
+  // ─── 模块锁定状态（锁定后默认勾选且无法取消） ───
+  const [lockedModules, setLockedModules] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('extract_locked_modules_v1') || '[]')); } catch { return new Set(); }
+  });
+  const toggleLock = (id: string) => {
+    setLockedModules(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) { next.delete(id); } else { next.add(id); if (!activeKeys.includes(id)) { toggleActive(id); } }
+      try { localStorage.setItem('extract_locked_modules_v1', JSON.stringify([...next])); } catch { /* */ }
+      return next;
+    });
   };
 
   const models = getEnabledModels();
@@ -388,6 +631,11 @@ export default function ExtractPage() {
   useEffect(() => {
     saveConfig({ outputMode, extractMode, chaptersPerBatch, pointsPerFile });
   }, [outputMode, extractMode, chaptersPerBatch, pointsPerFile]);
+
+  // 持久化断点导入游标
+  useEffect(() => {
+    try { localStorage.setItem('extract_last_imported_idx', String(lastImportedIdx)); } catch { /* */ }
+  }, [lastImportedIdx]);
 
 
 
@@ -410,26 +658,6 @@ export default function ExtractPage() {
   const toggleAll = (selected: boolean) => setFiles(prev => prev.map(f => ({ ...f, selected })));
   const toggleFile = (id: string) => setFiles(prev => prev.map(f => f.id === id ? { ...f, selected: !f.selected } : f));
   const selectedCount = files.filter(f => f.selected).length;
-
-  // ─── 模块拖拽 ───
-  const handleModDragStart = (id: string) => setDragId(id);
-  const handleModDragOver = (e: React.DragEvent, id: string) => { e.preventDefault(); if (dragId && dragId !== id) setDragOverId(id); };
-  const handleModDragLeave = () => setDragOverId(null);
-  const handleModDrop = (e: React.DragEvent, targetId: string) => {
-    e.preventDefault();
-    if (dragId && dragId !== targetId) {
-      // 判断 dragId 在哪个区域
-      const inSystem = systemKeys.includes(dragId);
-      const targetInSystem = systemKeys.includes(targetId);
-      if (inSystem && targetInSystem) {
-        reorderSystem(dragId, targetId);
-      } else if (!inSystem && !targetInSystem) {
-        reorderOutput(dragId, targetId);
-      }
-      // 跨区域在 handleDropOnZone 中处理
-    }
-    setDragId(null); setDragOverId(null);
-  };
 
   // ─── 模块编辑 ───
   const selectModule = (id: string) => {
@@ -469,6 +697,8 @@ export default function ExtractPage() {
     const selectedFiles = files.filter(f => f.selected);
     if (selectedFiles.length === 0 || activeOutputKeys.length === 0) return;
     setIsProcessing(true); setIsAborting(false); setShowResult(true); setPlotPoints([]);
+    // 新提炼任务开始时重置断点（全新的剧情点，不沿用旧断点）
+    setLastImportedIdx(-1);
 
     // 模块轮播列表
     const allActiveLabels = [...activeSystemKeys, ...activeOutputKeys]
@@ -519,15 +749,35 @@ export default function ExtractPage() {
         const chapterText = batch.content.slice(0, 12000);
         const { systemPrompt, userPrompt } = buildPrompt(activeSystemKeys, activeOutputKeys, chapterText, allModules);
 
-        if (streamEnabled) {
-          // ═══ 流式模式：实时拆分剧情点 ═══
+        if (true) {
+          // ═══ 流式模式：实时拆分剧情点（批量UI更新，避免阻塞） ═══
           const SEP = '\n---\n';
           const BUF_KEEP = 10;
+          const UPDATE_INTERVAL = 150; // 最多每150ms刷新一次UI
           let buffer = '';
           let pointIdx = allPoints.length;
+          let lastUpdateTime = 0;
+          let pendingUpdate = false;
 
           allPoints.push({ _raw: '', _chapter: batch.title } as ExtractedPlotPoint);
           setPlotPoints([...allPoints]);
+
+          const flushUI = () => {
+            pendingUpdate = false;
+            lastUpdateTime = Date.now();
+            setPlotPoints([...allPoints]);
+          };
+          const scheduleUpdate = () => {
+            if (pendingUpdate) return;
+            const now = Date.now();
+            const elapsed = now - lastUpdateTime;
+            if (elapsed >= UPDATE_INTERVAL) {
+              flushUI();
+            } else {
+              pendingUpdate = true;
+              setTimeout(flushUI, UPDATE_INTERVAL - elapsed);
+            }
+          };
 
           await callModelAPIStream(
             `${systemPrompt}\n\n${userPrompt}`,
@@ -535,10 +785,11 @@ export default function ExtractPage() {
             signal,
             (delta, _accumulated, isDone) => {
               if (!delta && !isDone) return;
+              if (signal.aborted) { scheduleUpdate(); return; }
               if (isDone) {
                 allPoints[pointIdx] = { ...allPoints[pointIdx], _raw: ((allPoints[pointIdx] as any)?._raw || '') + buffer };
                 buffer = '';
-                setPlotPoints([...allPoints]);
+                flushUI();
                 return;
               }
               buffer += delta;
@@ -555,7 +806,7 @@ export default function ExtractPage() {
                 allPoints[pointIdx] = { ...allPoints[pointIdx], _raw: ((allPoints[pointIdx] as any)?._raw || '') + buffer.slice(0, safeLen) };
                 buffer = buffer.slice(safeLen);
               }
-              setPlotPoints([...allPoints]);
+              scheduleUpdate();
             }
           );
         } else {
@@ -714,28 +965,6 @@ export default function ExtractPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* 流式传输开关 */}
-            <label
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg border cursor-pointer transition-colors select-none ${
-                streamEnabled
-                  ? 'text-brand bg-brand-light border-brand'
-                  : 'text-gray-500 bg-gray-100 border-gray-200'
-              }`}
-              title={streamEnabled ? '流式传输已开启：AI输出实时显示' : '流式传输已关闭：等AI全部写完再显示'}
-            >
-              <input
-                type="checkbox"
-                checked={streamEnabled}
-                onChange={(e) => {
-                  const v = e.target.checked;
-                  setStreamEnabled(v);
-                  try { localStorage.setItem('extract_stream_enabled', String(v)); } catch { /* */ }
-                }}
-                className="w-3 h-3 text-brand rounded cursor-pointer"
-              />
-              <Zap className="w-3 h-3" />
-              <span>流式传输</span>
-            </label>
             {/* 导出配置 */}
             <button
               onClick={() => {
@@ -797,56 +1026,68 @@ export default function ExtractPage() {
       {/* ═══ 统一布局：左(模块列表) + 中(动态) + 右(预览) ═══ */}
       {/* ════════════════════════════════════════════ */}
       <div className="flex-1 flex min-h-0">
-        {/* 左：模块列表（始终固定） */}
+        {/* 左：模块列表（@dnd-kit 拖拽排序） */}
         <div className="w-[200px] flex flex-col bg-white border-r border-gray-200 shrink-0">
-          {/* ─── 系统指令区 ─── */}
+          {/* ─── 系统指令区（可拖拽排序） ─── */}
           <div className="shrink-0 mt-2 mb-1 px-3 py-1.5 rounded-md" style={{ backgroundColor: '#FFF7ED', marginLeft: '8px', marginRight: '8px' }}>
             <span className="text-sm font-bold" style={{ color: '#92400E' }}>系统指令</span>
           </div>
-          <div className="shrink-0 max-h-[35%] overflow-y-auto"
-            onDragOver={e => { e.preventDefault(); setDragOverZone('system'); }}
-            onDragLeave={() => setDragOverZone(null)}
-            onDrop={e => handleDropOnZone(e, 'system')}
-          >
-            {systemKeys.map(id => {
-              const mod = allModules[id]; if (!mod) return null;
-              const Icon = MODULE_ICONS[id] || Layers;
-              return (
-                <ModuleListItem
-                  key={id} id={id} mod={mod}
-                  isActive={activeKeys.includes(id)} isSelected={isEditMode && editingId === id} Icon={Icon}
-                  onToggleActive={toggleActive} onSelect={isEditMode ? selectModule : (mid: string) => { setIsEditMode(true); selectModule(mid); }}
-                  dragId={dragId} dragOverId={dragOverId}
-                  onDragStart={handleModDragStart} onDragOver={handleModDragOver}
-                  onDragLeave={handleModDragLeave} onDrop={handleModDrop} allMods={allModules}
-                />
-              );
-            })}
+          <div className="shrink-0 max-h-[35%] overflow-y-auto">
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={(e: DragEndEvent) => {
+                const { active, over } = e;
+                if (!over || active.id === over.id) return;
+                reorderSystem(String(active.id), String(over.id));
+              }}
+            >
+              <SortableContext items={systemKeys} strategy={verticalListSortingStrategy}>
+                {systemKeys.map(id => {
+                  const mod = allModules[id]; if (!mod) return null;
+                  const Icon = MODULE_ICONS[id] || Layers;
+                  return (
+                    <SortableModuleItem
+                      key={id} id={id} mod={mod}
+                      isActive={activeKeys.includes(id)} isSelected={isEditMode && editingId === id} isLocked={lockedModules.has(id)} Icon={Icon}
+                      onToggleActive={toggleActive} onSelect={isEditMode ? selectModule : (mid: string) => { setIsEditMode(true); selectModule(mid); }} onToggleLock={toggleLock}
+                      allMods={allModules}
+                    />
+                  );
+                })}
+              </SortableContext>
+            </DndContext>
           </div>
 
-          {/* ─── 输出模块区 ─── */}
+          {/* ─── 输出模块区（可拖拽排序） ─── */}
           <div className="shrink-0 mt-1 mb-1 px-3 py-1.5 rounded-md" style={{ backgroundColor: '#E6F7FB', marginLeft: '8px', marginRight: '8px' }}>
             <span className="text-sm font-bold" style={{ color: '#0E7490' }}>输出模块</span>
           </div>
-          <div className="flex-1 overflow-y-auto"
-            onDragOver={e => { e.preventDefault(); setDragOverZone('output'); }}
-            onDragLeave={() => setDragOverZone(null)}
-            onDrop={e => handleDropOnZone(e, 'output')}
-          >
-            {outputKeys.map(id => {
-              const mod = allModules[id]; if (!mod) return null;
-              const Icon = MODULE_ICONS[id] || Layers;
-              return (
-                <ModuleListItem
-                  key={id} id={id} mod={mod}
-                  isActive={activeKeys.includes(id)} isSelected={isEditMode && editingId === id} Icon={Icon}
-                  onToggleActive={toggleActive} onSelect={isEditMode ? selectModule : (mid: string) => { setIsEditMode(true); selectModule(mid); }}
-                  dragId={dragId} dragOverId={dragOverId}
-                  onDragStart={handleModDragStart} onDragOver={handleModDragOver}
-                  onDragLeave={handleModDragLeave} onDrop={handleModDrop} allMods={allModules}
-                />
-              );
-            })}
+          <div className="flex-1 overflow-y-auto">
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={(e: DragEndEvent) => {
+                const { active, over } = e;
+                if (!over || active.id === over.id) return;
+                reorderOutput(String(active.id), String(over.id));
+              }}
+            >
+              <SortableContext items={outputKeys} strategy={verticalListSortingStrategy}>
+                {outputKeys.map(id => {
+                  const mod = allModules[id]; if (!mod) return null;
+                  const Icon = MODULE_ICONS[id] || Layers;
+                  return (
+                    <SortableModuleItem
+                      key={id} id={id} mod={mod}
+                      isActive={activeKeys.includes(id)} isSelected={isEditMode && editingId === id} isLocked={lockedModules.has(id)} Icon={Icon}
+                      onToggleActive={toggleActive} onSelect={isEditMode ? selectModule : (mid: string) => { setIsEditMode(true); selectModule(mid); }} onToggleLock={toggleLock}
+                      allMods={allModules}
+                    />
+                  );
+                })}
+              </SortableContext>
+            </DndContext>
           </div>
           <div className="shrink-0 px-2.5 py-2 border-t border-gray-100">
             <button onClick={() => { setIsEditMode(true); startCreate(); }}
@@ -1066,7 +1307,7 @@ export default function ExtractPage() {
                 </div>
 
                 {/* 导出设置 */}
-                <div className="w-[25%] bg-white rounded-xl border border-gray-200 p-3">
+                <div className="w-[57%] bg-white rounded-xl border border-gray-200 p-3">
                   <h3 className="text-xs font-bold text-gray-900 mb-2">导出设置</h3>
                   <div className="space-y-2">
                     <label className={`flex items-center gap-2 px-3 py-2 rounded-lg border cursor-pointer transition-colors ${outputMode === 'single' ? 'border-brand bg-brand-light' : 'border-gray-200 hover:border-gray-300'}`}>
@@ -1090,37 +1331,7 @@ export default function ExtractPage() {
                   </div>
                 </div>
 
-                {/* 历史提炼记录 */}
-                <div className="w-[32%] bg-white rounded-xl border border-gray-200 p-3 flex flex-col">
-                  <h3 className="text-xs font-bold text-gray-900 mb-2 flex items-center gap-1">
-                    <FileText className="w-3.5 h-3.5 text-brand" /> 历史提炼记录
-                  </h3>
-                  <div className="flex-1 overflow-y-auto max-h-[200px] space-y-1.5">
-                    {history.length === 0 ? (
-                      <p className="text-[11px] text-gray-400 text-center py-4">暂无历史记录</p>
-                    ) : (
-                      history.map(h => (
-                        <div key={h.id} className="bg-gray-50 rounded-lg p-2 border border-gray-100">
-                          <div className="flex items-center justify-between mb-0.5">
-                            <span className="text-[10px] font-medium text-gray-700 truncate flex-1">
-                              {h.fileNames.slice(0, 2).join(', ')}{h.fileNames.length > 2 ? ` 等${h.fileNames.length}个文件` : ''}
-                            </span>
-                            <span className="text-[9px] text-gray-400 shrink-0 ml-1">
-                              {new Date(h.timestamp).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-1.5 text-[9px] text-gray-500">
-                            <span>{h.plotPointCount}条剧情点</span>
-                            <span>·</span>
-                            <span className="text-brand">{h.extractModeLabel}</span>
-                            <span>·</span>
-                            <span className="truncate">{h.moduleLabels.slice(0, 3).join('、')}{h.moduleLabels.length > 3 ? '...' : ''}</span>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                </div>
+
               </div>
 
               {/* 上传文件（移到四列下方） */}
@@ -1146,7 +1357,7 @@ export default function ExtractPage() {
                       </div>
                     </div>
                     <div className="max-h-36 overflow-y-auto border border-gray-100 rounded-lg divide-y divide-gray-50">
-                      {files.map(file => (
+                      {[...files].reverse().map(file => (
                         <div key={file.id} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-gray-50">
                           <input type="checkbox" checked={file.selected} onChange={() => toggleFile(file.id)} className="w-3.5 h-3.5 rounded border-gray-300 text-brand focus:ring-brand" />
                           <FileText className="w-3.5 h-3.5 text-gray-400 shrink-0" />
@@ -1171,11 +1382,10 @@ export default function ExtractPage() {
           )}
         </div>
 
-        {/* 右：组合预览（始终固定） */}
+        {/* 右：模块预览（始终固定） */}
         <div className="w-[344px] bg-white border-l border-gray-200 overflow-y-auto shrink-0">
           <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-2">
-            <h3 className="text-[15px] font-bold text-gray-900 leading-[15px]">组合预览</h3>
-            <span className="text-[11px] text-gray-400">所有激活模块的提示词组合效果</span>
+            <h3 className="text-[17px] font-bold text-gray-900 leading-[17px]">模块预览</h3>
           </div>
           <div className="p-3">
             <PreviewPanel systemKeys={activeSystemKeys} outputKeys={activeOutputKeys} allModules={allModules} />
@@ -1368,84 +1578,97 @@ export default function ExtractPage() {
 
       {/* ═══════ 提炼结果弹层 ═══════ */}
       {showResult && (
+        <>
+        <style>{FADE_IN_CSS}</style>
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-8 bg-black/30 backdrop-blur-sm">
-          <div className="w-[800px] max-h-[90vh] min-h-[600px] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
-            <div className="shrink-0 flex items-center justify-between px-4 py-3 border-b border-gray-200">
+          <div className="w-[900px] max-h-[92vh] min-h-[600px] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
+            {/* 精致化顶部标题栏 */}
+            <div className="shrink-0 flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-200">
               <div className="flex items-center gap-3">
-                {isProcessing && <Loader2 className="w-4 h-4 text-brand animate-spin" />}
-                <h3 className="text-sm font-bold text-gray-900">{isProcessing ? '提炼中...' : `完成（${plotPoints.length} 条）`}</h3>
-                {/* ═══ 进度 + 模型预览 ═══ */}
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">{progress.current} / {progress.total}</span>
-                  <div className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-50 border border-blue-100 rounded-md">
-                    <Bot className="w-3 h-3 text-blue-500 shrink-0" />
-                    <span className="text-[10px] text-blue-600">{(() => {
-                      const effectiveModelId = selectedModel || getDefaultModelId();
-                      const cfg = getEnabledModels().find(m => m.id === effectiveModelId);
-                      if (!cfg) return effectiveModelId;
-                      return cfg.provider ? `${cfg.name}（${cfg.provider}）` : cfg.name;
-                    })()}</span>
+                {isProcessing ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 text-sky-500 animate-spin" />
+                    <h3 className="text-sm font-bold text-slate-800">提炼中</h3>
+                    {/* 进度 */}
+                    <span className="text-xs text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                      {progress.current} / {progress.total}
+                    </span>
+                    {/* 模型标签 */}
+                    <span className="flex items-center gap-1.5 text-[10px] text-sky-600 bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full">
+                      <Bot className="w-3 h-3" />
+                      {(() => {
+                        const effectiveModelId = selectedModel || getDefaultModelId();
+                        const cfg = getEnabledModels().find(m => m.id === effectiveModelId);
+                        if (!cfg) return effectiveModelId;
+                        return cfg.provider ? `${cfg.name} · ${cfg.provider}` : cfg.name;
+                      })()}
+                    </span>
                   </div>
-                </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Check className="w-4 h-4 text-emerald-500" />
+                    <h3 className="text-sm font-bold text-slate-800">提炼完成</h3>
+                    <span className="text-xs text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                      {plotPoints.length} 条剧情点
+                    </span>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-3">
-                <button onClick={() => { setShowResult(false); setPlotPoints([]); }}
-                  className="p-1 text-gray-400 hover:text-gray-600 rounded">
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
+              <button onClick={() => { setShowResult(false); setPlotPoints([]); }}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <div className="flex-1 overflow-hidden p-4 flex flex-col gap-3 min-h-0">
+            <div className="flex-1 overflow-hidden min-h-0">
               {plotPoints.length === 0 && !isProcessing && (
                 <div className="text-center text-gray-400 py-8">暂无提炼结果</div>
               )}
-              {/* 提炼中默认显示一个空卡片，不显得单调 */}
               {plotPoints.length === 0 && isProcessing && (
-                <div className="flex-1 min-h-0 border border-gray-400 rounded-lg overflow-hidden flex flex-col">
-                  <div className="px-3 py-1.5 bg-brand-light border-b border-gray-300 flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-brand">剧情点 1</span>
-                    <span className="ml-auto flex items-center gap-1">
-                      <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                      <span className="text-[9px] text-green-600">输出中</span>
-                    </span>
-                  </div>
-                  <div className="flex-1 p-3 text-[13px] text-gray-300 overflow-y-auto">
-                    <span>等待AI输出...</span>
-                    <span className="inline-block w-2 h-4 bg-brand ml-0.5 animate-pulse align-middle" />
+                <div className="h-full p-4">
+                  <div className="h-full border border-gray-400 rounded-lg overflow-hidden flex flex-col">
+                    <div className="px-3 py-1.5 bg-brand-light border-b border-gray-300 flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-brand">剧情点 1</span>
+                      <span className="ml-auto flex items-center gap-1">
+                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+                        <span className="text-[9px] text-green-600">输出中</span>
+                      </span>
+                    </div>
+                    <div className="flex-1 p-3 text-[13px] text-gray-300 overflow-y-auto">
+                      <span>等待AI输出...</span>
+                      <span className="inline-block w-2 h-4 bg-brand ml-0.5 animate-pulse align-middle" />
+                    </div>
                   </div>
                 </div>
               )}
-              {plotPoints.map((point, idx) => {
-                const content = (point as any)._raw || '';
-                const chapter = (point as any)._chapter || '';
-                const isLast = idx === plotPoints.length - 1;
-                const isStreaming = isProcessing && isLast;
-                const isSingle = plotPoints.length === 1;
-                return (
-                  <div key={idx} className={`border border-gray-400 rounded-lg overflow-hidden flex flex-col ${isSingle ? 'flex-1 min-h-0' : ''}`}>
-                    <div className="px-3 py-1.5 bg-brand-light border-b border-gray-300 flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-brand">剧情点 {idx + 1}</span>
-                      {chapter && <span className="text-[10px] text-gray-500 truncate">{chapter}</span>}
-                      {isStreaming && (
-                        <span className="ml-auto flex items-center gap-1">
-                          <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                          <span className="text-[9px] text-green-600">输出中</span>
-                        </span>
-                      )}
-                    </div>
-                    <div className={`p-3 text-[13px] text-gray-800 leading-relaxed whitespace-pre-wrap break-words overflow-y-auto ${isSingle ? 'flex-1 min-h-0' : ''}`}>
-                      {content}
-                      {isStreaming && <span className="inline-block w-2 h-4 bg-brand ml-0.5 animate-pulse align-middle" />}
-                    </div>
+              {plotPoints.length > 0 && (
+                /* ═══ Master-Detail：左侧数字格子 + 右侧详情 ═══ */
+                <div className="flex flex-1 min-h-0">
+                  {/* 左侧：紧凑数字格子 */}
+                  <div className="w-[140px] shrink-0 border-r border-slate-200 flex flex-col">
+                    <MasterList
+                      plotPoints={plotPoints}
+                      activeIdx={activeIdx}
+                      onSelect={setActiveIdx}
+                      lastImportedIdx={lastImportedIdx}
+                      isProcessing={isProcessing}
+                    />
                   </div>
-                );
-              })}
+                  {/* 右侧：详情预览 */}
+                  <div className="flex-1 flex flex-col min-h-0 p-4 bg-slate-50/50 overflow-hidden">
+                    <DetailCard
+                      point={plotPoints[activeIdx]}
+                      activeIdx={activeIdx}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="shrink-0 px-4 py-3 border-t border-gray-200 flex justify-end gap-2">
+            {/* 精致化底部按钮栏 */}
+            <div className="shrink-0 px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
               {isProcessing ? (
                 <button onClick={handleAbort} disabled={isAborting}
-                  className="flex items-center gap-1 px-5 py-2 text-sm font-medium text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50 transition-colors">
-                  <Loader2 className={`w-4 h-4 ${isAborting ? 'animate-spin' : ''}`} /> {isAborting ? '中止中...' : '中止提炼'}
+                  className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors shadow-sm">
+                  <Loader2 className={`w-4 h-4 ${isAborting ? 'animate-spin' : ''}`} /> {isAborting ? '正在中止...' : '中止提炼'}
                 </button>
               ) : plotPoints.length > 0 && (
                 <div className="flex items-center gap-2">
@@ -1461,8 +1684,15 @@ export default function ExtractPage() {
                       setShowImportLibrary(true);
                     }}
                     className="flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-brand border border-brand rounded-lg hover:bg-brand-light transition-colors"
+                    title={`上次导入到第 ${lastImportedIdx + 1} 章，点击进行断点导入`}
                   >
-                    <Library className="w-4 h-4" /> 导入剧情库
+                    <Library className="w-4 h-4" />
+                    断点导入
+                    {lastImportedIdx >= 0 && (
+                      <span className="text-[9px] bg-brand text-white px-1 py-0.5 rounded">
+                        已入库 {lastImportedIdx + 1}
+                      </span>
+                    )}
                   </button>
                   <button onClick={handleExport}
                     className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors">
@@ -1473,6 +1703,7 @@ export default function ExtractPage() {
             </div>
           </div>
         </div>
+      </>
       )}
 
             {/* ═══════ 导入配置弹窗 ═══════ */}
@@ -1553,54 +1784,108 @@ export default function ExtractPage() {
         </div>
       )}
 
-      {/* ═══════ 导入剧情库确认弹窗 ═══════ */}
+      {/* ═══════ 导入剧情库确认弹窗（断点导入） ═══════ */}
       {showImportLibrary && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
-          <div className="w-[420px] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
+          <div className="w-[440px] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
             {/* 头部 */}
             <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
               <div className="w-10 h-10 bg-brand-light rounded-lg flex items-center justify-center">
                 <Library className="w-5 h-5 text-brand" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-gray-900">导入剧情库</h3>
-                <p className="text-[11px] text-gray-400 mt-0.5">将提炼结果导入剧情库以便后续查看</p>
+                <h3 className="text-base font-bold text-gray-900">断点导入剧情库</h3>
+                <p className="text-[11px] text-gray-400 mt-0.5">仅导入上次断点之后的新剧情点</p>
               </div>
             </div>
             {/* 内容 */}
             <div className="p-5 space-y-3">
-              <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg">
-                <span className="text-xs text-gray-500">有效剧情点：</span>
-                <span className="text-sm font-bold text-brand">{importLibraryCount}</span>
-                <span className="text-xs text-gray-400">条（已过滤无效内容）</span>
+              {/* 断点状态 */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col gap-1 px-3 py-2 bg-gray-50 rounded-lg">
+                  <span className="text-[10px] text-gray-400">上次导入断点</span>
+                  <span className="text-sm font-bold text-gray-700">
+                    {lastImportedIdx >= 0 ? `第 ${lastImportedIdx + 1} 章` : '从未导入'}
+                  </span>
+                </div>
+                <div className="flex flex-col gap-1 px-3 py-2 bg-brand-light rounded-lg">
+                  <span className="text-[10px] text-brand">本次将导入</span>
+                  <span className="text-sm font-bold text-brand">
+                    {Math.max(0, importLibraryCount - (lastImportedIdx + 1))} 条新剧情点
+                  </span>
+                </div>
               </div>
+              {/* 进度条 */}
+              {plotPoints.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[10px] text-gray-400">导入进度</span>
+                    <span className="text-[10px] text-gray-500">{Math.min(lastImportedIdx + 1, plotPoints.length)} / {plotPoints.length}</span>
+                  </div>
+                  <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-green-500 rounded-full transition-all"
+                      style={{ width: `${Math.min(100, ((lastImportedIdx + 1) / Math.max(plotPoints.length, 1)) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              )}
               <div className="bg-amber-50 rounded-lg p-3 border border-amber-100">
                 <p className="text-[11px] text-amber-700">
-                  导入后可在「剧情库」页面查看、搜索和排序所有剧情点。
+                  断点导入只导入上次断点之后的剧情点，避免重复。导入后可在「剧情库」页面查看。
                 </p>
               </div>
             </div>
             {/* 底部按钮 */}
-            <div className="px-5 py-3 border-t border-gray-100 flex justify-end gap-3">
-              <button onClick={() => setShowImportLibrary(false)}
-                className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
-                取消
-              </button>
+            <div className="px-5 py-3 border-t border-gray-100 flex justify-between items-center">
               <button
                 onClick={() => {
-                  const fileNames = files.filter(f => f.selected).map(f => f.name).join(', ');
-                  const count = importToPlotLibrary(plotPoints, fileNames);
-                  setShowImportLibrary(false);
-                  // 显示成功提示（替换alert）
-                  setTimeout(() => {
-                    setShowResult(false);
-                    window.location.hash = '#/plot-library';
-                  }, 500);
+                  if (confirm('确定要重置导入断点吗？下次将从头导入所有剧情点。')) {
+                    setLastImportedIdx(-1);
+                  }
                 }}
-                className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors"
+                className="text-[11px] text-gray-400 hover:text-red-500 px-2 py-1 rounded hover:bg-red-50 transition-colors"
               >
-                <Check className="w-4 h-4" /> 确认导入
+                重置断点
               </button>
+              <div className="flex gap-3">
+                <button onClick={() => setShowImportLibrary(false)}
+                  className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                  取消
+                </button>
+                <button
+                  onClick={() => {
+                    const fileNames = files.filter(f => f.selected).map(f => f.name).join(', ');
+                    // ═══ 断点导入：只取 lastImportedIdx 之后的剧情点 ═══
+                    const SKIP_KEYWORDS = ['无实质剧情点', '未达到提炼标准', '无可提炼剧情点', '跳过'];
+                    const validPoints = plotPoints.filter((p, idx) => {
+                      if (idx <= lastImportedIdx) return false; // 跳过已导入的
+                      const raw = ((p as any)._raw || '').trim();
+                      if (!raw) return false;
+                      const lower = raw.toLowerCase();
+                      return !SKIP_KEYWORDS.some(kw => lower.includes(kw));
+                    });
+                    if (validPoints.length === 0) {
+                      alert('没有新的剧情点需要导入（断点之后的已全部导入）');
+                      setShowImportLibrary(false);
+                      return;
+                    }
+                    // 传入 allModules 实现改名兼容（基于模块key匹配，不依赖硬编码中文）
+                    const count = importToPlotLibrary(validPoints, fileNames, allModules);
+                    // 更新断点到最后一个有效剧情点索引
+                    const newLastIdx = plotPoints.length - 1;
+                    setLastImportedIdx(newLastIdx);
+                    setShowImportLibrary(false);
+                    setTimeout(() => {
+                      setShowResult(false);
+                      window.location.hash = '#/plot-library';
+                    }, 500);
+                  }}
+                  className="flex items-center gap-1.5 px-5 py-2 text-sm font-medium text-white bg-brand rounded-lg hover:bg-brand-dark transition-colors"
+                >
+                  <Check className="w-4 h-4" /> 确认导入
+                </button>
+              </div>
             </div>
           </div>
         </div>

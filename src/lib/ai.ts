@@ -76,7 +76,6 @@ export async function callModelAPI(content: string, modelId?: string): Promise<s
 
 /**
  * 流式调用 - 前端直接调用模型 API
- * 流式内容通过 DOM 元素 ID 直接显示
  */
 export async function callModelAPIStream(
   content: string,
@@ -84,6 +83,16 @@ export async function callModelAPIStream(
   signal?: AbortSignal,
   onChunk?: (delta: string, accumulated: string, isDone: boolean) => void
 ): Promise<string> {
+  let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+
+  // abort 监听器：signal 触发时主动 cancel reader，立即中断流式读取
+  const onAbort = () => {
+    if (reader) {
+      reader.cancel().catch(() => {});
+    }
+  };
+  signal?.addEventListener('abort', onAbort);
+
   try {
     const raw = localStorage.getItem('api_settings_v2');
     if (!raw) return '【错误】未配置模型，请先在模型管理中配置。';
@@ -117,29 +126,33 @@ export async function callModelAPIStream(
       return `【错误】模型请求失败 (${response.status}): ${err.slice(0, 200)}`;
     }
 
-    return await readStreamChunks(response, onChunk);
+    reader = response.body!.getReader();
+    return await readStreamChunks(reader, signal, onChunk);
   } catch (err: any) {
     if (err.name === 'AbortError') return '【已终止】';
     return `【错误】请求异常: ${err.message || String(err)}`;
+  } finally {
+    signal?.removeEventListener('abort', onAbort);
   }
 }
 
 /**
  * 流式读取响应内容
- * 通过 onChunk 回调传递增量文本（delta）和累积文本（accumulated）
- * 调用方负责实时显示，不再硬编码写入DOM
- * 返回前进行文本清理（去除 ## # 等叠加标题）
+ * signal 用于支持快速中止（调用 cancel() 后立即退出循环）
  */
 async function readStreamChunks(
-  response: Response,
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  signal?: AbortSignal,
   onChunk?: (delta: string, accumulated: string, isDone: boolean) => void
 ): Promise<string> {
-  const reader = response.body!.getReader();
   const decoder = new TextDecoder();
   let fullText = '';
 
   try {
     while (true) {
+      // 已被中止：立即退出
+      if (signal?.aborted) break;
+
       const { done, value } = await reader.read();
       if (done) break;
 
@@ -160,7 +173,6 @@ async function readStreamChunks(
 
           if (content) {
             fullText += content;
-            // 回调：传递增量文本 + 累积文本
             if (onChunk) onChunk(content, fullText, false);
           }
         } catch { /* ignore parse errors */ }

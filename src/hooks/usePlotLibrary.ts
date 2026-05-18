@@ -8,10 +8,87 @@ export interface PlotLibraryItem {
   chapter: string;
   sourceFile: string;
   createdAt: string;
-  tags?: string[];
 }
 
 const PLOT_LIBRARY_KEY = 'plot_library_v1';
+
+/** 模块 key → 动态获取当前 label，解决改名兼容性问题 */
+const MODULE_KEYS_TO_REMOVE = new Set(['jiazhipinggu', 'juqingleixing']);
+
+/**
+ * 从正文中删除指定 Markdown 模块（标题+内容）
+ * 基于模块 key（如 jiazhipinggu）动态查找当前 label，避免硬编码中文名称
+ * 保留 <fs> 和 <bq> 锚点（用于卡片左右结构提取）
+ */
+function removeModules(
+  content: string,
+  allModules?: Record<string, { label: string }>
+): string {
+  // 动态构建要移除的 label 集合（基于模块 key，不受改名影响）
+  const labelsToRemove = new Set<string>();
+  if (allModules) {
+    for (const key of MODULE_KEYS_TO_REMOVE) {
+      const mod = allModules[key];
+      if (mod) labelsToRemove.add(mod.label);
+    }
+  } else {
+    // fallback：如果未传入模块配置，尝试使用硬编码
+    labelsToRemove.add('评分');
+    labelsToRemove.add('主题标签');
+  }
+
+  const lines = content.split('\n');
+  const result: string[] = [];
+  let skipModule = false;
+  let inAnchorBlock = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    
+    if (/^---+$/.test(trimmed)) {
+      skipModule = false;
+      inAnchorBlock = false;
+      result.push(line);
+      continue;
+    }
+    
+    if (/^<(fs|bq)>/.test(trimmed)) {
+      inAnchorBlock = true;
+      result.push(line);
+      continue;
+    }
+    
+    if (/^<\/(fs|bq)>/.test(trimmed)) {
+      inAnchorBlock = false;
+      result.push(line);
+      continue;
+    }
+    
+    if (inAnchorBlock) {
+      result.push(line);
+      continue;
+    }
+    
+    if (/^#\s/.test(trimmed)) {
+      const title = trimmed.replace(/^#\s*/, '').trim();
+      if (skipModule) {
+        skipModule = false;
+      }
+      if (labelsToRemove.has(title)) {
+        skipModule = true;
+        continue;
+      }
+    }
+    
+    if (!skipModule) {
+      result.push(line);
+    }
+  }
+  
+  let cleaned = result.join('\n');
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+  return cleaned.trim();
+}
 
 function loadLibrary(): PlotLibraryItem[] {
   try {
@@ -27,18 +104,16 @@ function saveLibrary(items: PlotLibraryItem[]) {
   } catch { /* */ }
 }
 
-/**
- * 剧情库数据管理
- */
-/**
- * 纯函数：将剧情点导入剧情库（不依赖React hook）
- * @param points 要导入的剧情点（_raw 为 Markdown 内容，_chapter 为章节名）
- */
 export type { PlotLibraryItem };
 
+/**
+ * 纯函数：将剧情点导入剧情库
+ * @param allModules 当前模块配置（用于动态获取模块 label，支持改名后正确移除）
+ */
 export function importToPlotLibrary(
   points: Array<{ _raw?: string; _chapter?: string }>,
-  sourceFile: string = '未知文件'
+  sourceFile: string = '未知文件',
+  allModules?: Record<string, { label: string }>
 ): number {
   try {
     const existing = loadLibrary();
@@ -55,14 +130,15 @@ export function importToPlotLibrary(
     const toAdd: PlotLibraryItem[] = validPoints.map((p, i) => {
       const raw = ((p as any)._raw || '').trim();
       const chapter = ((p as any)._chapter || '').trim();
-      // 提取第一个 #标题 作为剧情点标题
-      const titleMatch = raw.match(/^#\s*(.+)/m);
+      // 存储前删除评分和主题标签模块（基于key动态匹配当前label，支持改名）
+      const cleaned = removeModules(raw, allModules);
+      const titleMatch = cleaned.match(/^#\s*(.+)/m);
       const title = titleMatch ? titleMatch[1].slice(0, 40) : `剧情点 ${existing.length + i + 1}`;
       return {
         id: `plot_${Date.now()}_${i}`,
         title,
-        content: raw,
-        wordCount: raw.length,
+        content: cleaned,
+        wordCount: cleaned.length,
         chapter,
         sourceFile,
         createdAt: now,
@@ -80,7 +156,6 @@ export function importToPlotLibrary(
 export function usePlotLibrary() {
   const [items, setItems] = useState<PlotLibraryItem[]>(() => loadLibrary());
 
-  /** 添加剧情点 */
   const addItems = useCallback((newItems: Omit<PlotLibraryItem, 'id' | 'createdAt' | 'wordCount'>[]) => {
     const now = new Date().toISOString();
     const toAdd: PlotLibraryItem[] = newItems.map((item, i) => ({
@@ -96,7 +171,6 @@ export function usePlotLibrary() {
     });
   }, []);
 
-  /** 删除剧情点 */
   const deleteItem = useCallback((id: string) => {
     setItems((prev) => {
       const next = prev.filter((p) => p.id !== id);
@@ -105,11 +179,25 @@ export function usePlotLibrary() {
     });
   }, []);
 
-  /** 清空剧情库 */
+  const updateItem = useCallback((id: string, updates: Partial<Pick<PlotLibraryItem, 'title' | 'content' | 'chapter'>>) => {
+    setItems((prev) => {
+      const next = prev.map((p) => {
+        if (p.id !== id) return p;
+        const updated = { ...p, ...updates };
+        if (updates.content !== undefined) {
+          updated.wordCount = updates.content.length;
+        }
+        return updated;
+      });
+      saveLibrary(next);
+      return next;
+    });
+  }, []);
+
   const clearAll = useCallback(() => {
     setItems([]);
     saveLibrary([]);
   }, []);
 
-  return { items, addItems, deleteItem, clearAll };
+  return { items, addItems, deleteItem, updateItem, clearAll };
 }

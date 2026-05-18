@@ -395,6 +395,39 @@ export function useExtractModules() {
     }
   }, [saveModules, saveSystemOrder, saveOutputOrder]);
 
+  // ─── 上移/下移（替代拖拽排序） ───
+  const moveUp = useCallback((id: string) => {
+    if (allModules[id]?.output) {
+      setOutputOrder(prev => {
+        const idx = prev.indexOf(id); if (idx <= 0) return prev;
+        const next = [...prev]; [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+        saveOutputOrder(next); return next;
+      });
+    } else {
+      setSystemOrder(prev => {
+        const idx = prev.indexOf(id); if (idx <= 0) return prev;
+        const next = [...prev]; [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+        saveSystemOrder(next); return next;
+      });
+    }
+  }, [allModules, saveSystemOrder, saveOutputOrder]);
+
+  const moveDown = useCallback((id: string) => {
+    if (allModules[id]?.output) {
+      setOutputOrder(prev => {
+        const idx = prev.indexOf(id); if (idx === -1 || idx >= prev.length - 1) return prev;
+        const next = [...prev]; [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+        saveOutputOrder(next); return next;
+      });
+    } else {
+      setSystemOrder(prev => {
+        const idx = prev.indexOf(id); if (idx === -1 || idx >= prev.length - 1) return prev;
+        const next = [...prev]; [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+        saveSystemOrder(next); return next;
+      });
+    }
+  }, [allModules, saveSystemOrder, saveOutputOrder]);
+
   // ─── 恢复内置模块默认设置 ───
   const resetToDefault = useCallback((id: string) => {
     if (!DEFAULT_MODULES[id]) return;
