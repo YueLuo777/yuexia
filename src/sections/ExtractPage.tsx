@@ -5,7 +5,7 @@ import {
   Lock, LockOpen, GripVertical,
   Plus, Trash2, ChevronLeft, ChevronDown, Bot, Library,
   Star, BookOpen, GitBranch, Lightbulb, Tag, Trophy,
-  Users, MapPin, Eye, Timer,
+  Users, MapPin, Eye, Timer, BookMarked, ArrowLeft,
 } from 'lucide-react';
 import {
   DndContext,
@@ -47,7 +47,7 @@ import {
   type ExtractedPlotPoint,
 } from '@/lib/extractEngine';
 import { importToPlotLibrary } from '@/hooks/usePlotLibrary';
-
+import { useNovelsContext } from '@/hooks/useNovels';
 const FILES_CACHE_KEY = 'extract_files_cache';
 const HISTORY_KEY = 'extract_history_v1';
 type ExtractMode = 'chapter' | 'multi' | 'smart';
@@ -299,27 +299,26 @@ function DetailCard({ point, activeIdx }: { point: ExtractedPlotPoint; activeIdx
 
   return (
     <div className="animate-fadeIn flex flex-col flex-1 min-h-0" key={animKey}>
-      {/* 外层主卡片（填满高度） */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
-        {/* 标题栏 */}
-        <div className="shrink-0 px-4 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center gap-3">
+      {/* ═══ 一体化卡片：Header + Body 无缝融合 ═══ */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden flex flex-col flex-1 min-h-0">
+        {/* Header：浅色底纹，无独立圆角，与 Body 严丝合缝 */}
+        <div className="shrink-0 px-5 py-3 bg-gray-50/80 border-b border-gray-100 flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <div className="w-6 h-6 rounded-lg bg-sky-500 flex items-center justify-center text-white text-[11px] font-bold shadow-sm">
+            <div className="w-6 h-6 rounded-lg bg-[#0084ff] flex items-center justify-center text-white text-[11px] font-bold">
               {activeIdx + 1}
             </div>
             <div>
-              <span className="text-sm font-bold text-slate-800">剧情点 {activeIdx + 1}</span>
-              {chapter && <span className="ml-2 text-xs text-slate-500">{chapter}</span>}
+              <span className="text-sm font-bold text-gray-800">剧情点 {activeIdx + 1}</span>
+              {chapter && <span className="ml-2 text-xs text-gray-500">{chapter}</span>}
             </div>
           </div>
-          <span className="ml-auto text-[11px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+          <span className="ml-auto text-[11px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
             {content.length} 字
           </span>
         </div>
-
-        {/* 内容区：纯文本输出，无子卡片边框 */}
-        <div className="flex-1 overflow-y-auto min-h-0 p-5 text-[14px] text-slate-700 leading-relaxed whitespace-pre-wrap break-words">
-          {content || <span className="text-slate-300 italic">暂无内容</span>}
+        {/* Body：与 Header 共享同一个 Card 容器 */}
+        <div className="flex-1 overflow-y-auto min-h-0 p-5 text-[14px] text-gray-700 leading-relaxed whitespace-pre-wrap break-words">
+          {content || <span className="text-gray-300 italic">暂无内容</span>}
         </div>
       </div>
     </div>
@@ -342,18 +341,18 @@ function MasterList({
   }, [activeIdx]);
 
   return (
-    <div className="flex flex-col h-full bg-slate-50">
+    <div className="flex flex-col h-full">
       {/* 头部 */}
-      <div className="px-3 py-2 border-b border-slate-200 flex items-center justify-between shrink-0 bg-white">
-        <span className="text-[10px] font-bold text-slate-500">目录</span>
-        <span className="text-[9px] text-slate-400">{plotPoints.length}</span>
+      <div className="px-3 py-2 border-b border-gray-200 flex items-center justify-between shrink-0 bg-white">
+        <span className="text-[11px] font-bold text-gray-600">目录</span>
+        <span className="text-[10px] text-gray-400">{plotPoints.length}</span>
       </div>
-      {/* 紧凑数字网格 */}
-      <div ref={listRef} className="flex-1 overflow-y-auto p-2">
+      {/* 紧凑数字网格（px-3 与头部对齐，py-2 留白） */}
+      <div ref={listRef} className="flex-1 overflow-y-auto px-3 py-2">
         {plotPoints.length === 0 && (
-          <div className="text-center py-4 text-slate-300 text-[10px]">暂无</div>
+          <div className="text-center py-4 text-gray-300 text-[10px]">暂无</div>
         )}
-        <div className="grid grid-cols-5 gap-1">
+        <div className="grid grid-cols-5 gap-1.5">
           {plotPoints.map((point, idx) => {
             const chapter = (point as any)._chapter || '';
             const isActive = activeIdx === idx;
@@ -366,13 +365,13 @@ function MasterList({
                 data-idx={idx}
                 onClick={() => onSelect(idx)}
                 title={chapter || `剧情点 ${idx + 1}`}
-                className={`h-8 rounded-md flex items-center justify-center text-[11px] font-bold transition-all ${
+                className={`aspect-square rounded-lg flex items-center justify-center text-[12px] font-bold transition-all ${
                   isActive
-                    ? 'bg-sky-500 text-white shadow-sm'
+                    ? 'bg-[#0084ff] text-white shadow-sm'
                     : isImported
-                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
-                    : 'bg-white text-slate-500 border border-slate-150 hover:border-slate-300 hover:text-slate-700'
-                } ${isStreaming ? 'ring-2 ring-emerald-400 ring-offset-1' : ''}`}
+                    ? 'bg-[#0084ff]/5 text-[#0084ff] border border-[#0084ff]/20'
+                    : 'bg-white text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-gray-700'
+                } ${isStreaming ? 'ring-2 ring-[#0084ff]/40' : ''}`}
               >
                 {idx + 1}
               </button>
@@ -533,6 +532,215 @@ function PreviewPanel({
           未选择模块，无法生成预览
         </div>
       )}
+
+    </div>
+  );
+}
+
+// ─── 关联小说弹窗（上方小说选择 + 下方章节选择，类似 ExtractPlotModal 样式）───
+function LinkNovelExtractModal({
+  isOpen,
+  onClose,
+  onLink,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onLink: (novelId: string, chapterIds: string[]) => void;
+}) {
+  const { getNovelsByType, volumesMap } = useNovelsContext();
+  // 只取小说（过滤掉剧本）
+  const novels = getNovelsByType('novel');
+  const [selectedNovelId, setSelectedNovelId] = useState<string | null>(null);
+  const [selectedChapterIds, setSelectedChapterIds] = useState<Set<string>>(new Set());
+
+  // 当前选中小说的章节列表
+  const chapters = useMemo(() => {
+    if (!selectedNovelId) return [];
+    return volumesMap[selectedNovelId] || [];
+  }, [selectedNovelId, volumesMap]);
+
+  const selectedCount = selectedChapterIds.size;
+  const currentNovel = novels.find(n => n.id === selectedNovelId);
+
+  // 打开时自动选第一个小说，重置章节选择
+  useEffect(() => {
+    if (isOpen) {
+      if (novels.length > 0 && !selectedNovelId) {
+        setSelectedNovelId(novels[0].id);
+      }
+      setSelectedChapterIds(new Set());
+    }
+  }, [isOpen, novels, selectedNovelId]);
+
+  // 切换小说时清空章节选择
+  const handleSelectNovel = (novelId: string) => {
+    setSelectedNovelId(novelId);
+    setSelectedChapterIds(new Set());
+  };
+
+  // 切换单个章节选中
+  const toggleChapter = (chapterId: string) => {
+    setSelectedChapterIds(prev => {
+      const next = new Set(prev);
+      if (next.has(chapterId)) next.delete(chapterId);
+      else next.add(chapterId);
+      return next;
+    });
+  };
+
+  // 快捷选择
+  const selectCount = (count: number) => {
+    const ids = chapters.slice(0, count).map(c => c.id);
+    setSelectedChapterIds(new Set(ids));
+  };
+  const selectAll = () => setSelectedChapterIds(new Set(chapters.map(c => c.id)));
+  const clearAll = () => setSelectedChapterIds(new Set());
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm" onClick={onClose}>
+      <div className="w-[520px] max-h-[80vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden" onClick={e => e.stopPropagation()}>
+        {/* 头部：关联小说 · 小说名 */}
+        <div className="shrink-0 px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <BookMarked className="w-5 h-5 text-[#0084ff]" />
+            <h3 className="text-base font-bold text-gray-900">
+              关联小说
+              {currentNovel && <span className="text-gray-400 font-normal"> · {currentNovel.title}</span>}
+            </h3>
+          </div>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600 rounded">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* 内容区 */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {/* 上方：小说选择条 */}
+          <div className="px-5 py-3 border-b border-gray-100">
+            <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">选择小说</div>
+            {novels.length === 0 ? (
+              <div className="text-center py-4 text-gray-300 text-sm">暂无小说</div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {novels.map(novel => {
+                  const chapterCount = (volumesMap[novel.id] || []).length;
+                  const isActive = selectedNovelId === novel.id;
+                  return (
+                    <button
+                      key={novel.id}
+                      onClick={() => handleSelectNovel(novel.id)}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-lg text-left transition-all border ${
+                        isActive
+                          ? 'bg-[#0084ff]/5 border-[#0084ff]/30 text-[#0084ff]'
+                          : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      <BookMarked className="w-3.5 h-3.5 shrink-0" />
+                      <div>
+                        <div className="text-[12px] font-medium truncate max-w-[120px]">{novel.title}</div>
+                        <div className="text-[10px] opacity-60">{chapterCount} 章</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* 下方：章节选择区（类似 ExtractPlotModal 样式） */}
+          <div className="px-5 py-4">
+            {/* 章节选择标题行 */}
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-bold text-gray-800">选择章节</span>
+                <span className="text-[11px] text-gray-400">
+                  （{selectedCount} / {chapters.length}）
+                </span>
+              </div>
+              {/* 快捷按钮 */}
+              {chapters.length > 0 && (
+                <div className="flex items-center gap-1">
+                  {[5, 10, 20, 50].map(n => (
+                    chapters.length >= n && (
+                      <button
+                        key={n}
+                        onClick={() => selectCount(n)}
+                        className="px-2 py-0.5 text-[10px] text-gray-500 bg-gray-50 border border-gray-200 rounded hover:border-[#0084ff]/30 hover:text-[#0084ff] transition-colors"
+                      >
+                        {n}章
+                      </button>
+                    )
+                  ))}
+                  <button onClick={selectAll}
+                    className="px-2 py-0.5 text-[10px] text-gray-500 bg-gray-50 border border-gray-200 rounded hover:border-[#0084ff]/30 hover:text-[#0084ff] transition-colors"
+                  >
+                    全选
+                  </button>
+                  <button onClick={clearAll}
+                    className="px-2 py-0.5 text-[10px] text-gray-500 bg-gray-50 border border-gray-200 rounded hover:border-red-200 hover:text-red-500 transition-colors"
+                  >
+                    清空
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 章节序号网格（8列） */}
+            {chapters.length === 0 ? (
+              <div className="text-center py-8 text-gray-300 text-sm">该小说暂无章节</div>
+            ) : (
+              <div className="grid grid-cols-8 gap-1.5">
+                {chapters.map((chapter, idx) => {
+                  const isSelected = selectedChapterIds.has(chapter.id);
+                  return (
+                    <button
+                      key={chapter.id}
+                      onClick={() => toggleChapter(chapter.id)}
+                      className={`aspect-square rounded-lg flex items-center justify-center text-[11px] font-bold transition-all ${
+                        isSelected
+                          ? 'bg-[#0084ff] text-white shadow-sm'
+                          : 'bg-gray-50 text-gray-600 border border-gray-200 hover:border-[#0084ff]/40 hover:bg-[#0084ff]/[0.03]'
+                      }`}
+                      title={chapter.name}
+                    >
+                      {idx + 1}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 底部 */}
+        <div className="shrink-0 px-5 py-3 border-t border-gray-100 flex justify-between items-center">
+          <span className="text-[11px] text-gray-400">
+            {currentNovel?.title}
+            {selectedCount > 0 && <> · 已选 {selectedCount} 章</>}
+          </span>
+          <div className="flex gap-2">
+            <button onClick={onClose}
+              className="px-4 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              取消
+            </button>
+            <button
+              onClick={() => {
+                if (selectedNovelId && selectedCount > 0) {
+                  onLink(selectedNovelId, Array.from(selectedChapterIds));
+                }
+                onClose();
+              }}
+              disabled={!selectedNovelId || selectedCount === 0}
+              className="px-5 py-2 text-sm font-medium text-white bg-[#0084ff] rounded-lg hover:bg-[#0073e6] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              确认
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -583,6 +791,18 @@ export default function ExtractPage() {
   const [deleteTargetId, setDeleteTargetId] = useState<string>('');
   // 当前轮播显示的模块索引
   const [activeModuleIdx, setActiveModuleIdx] = useState(0);
+
+  // ─── 小说数据（必须在 linkedNovelName useMemo 之前）───
+  const { novels, volumesMap } = useNovelsContext();
+
+  // ─── 关联小说 ───
+  const [showLinkNovel, setShowLinkNovel] = useState(false);
+  const [linkedNovelId, setLinkedNovelId] = useState<string | null>(null);
+  const [linkedChapterCount, setLinkedChapterCount] = useState(0);
+  const linkedNovelName = useMemo(() => {
+    if (!linkedNovelId) return null;
+    return novels.find(n => n.id === linkedNovelId)?.title || null;
+  }, [linkedNovelId, novels]);
 
   // ─── 模块管理 ───
   const {
@@ -965,6 +1185,19 @@ export default function ExtractPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            {/* 关联小说 */}
+            <button
+              onClick={() => setShowLinkNovel(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-[11px] rounded-lg border transition-colors"
+              style={linkedNovelId ? { color: '#0084ff', backgroundColor: 'rgba(0,132,255,0.05)', borderColor: 'rgba(0,132,255,0.15)' } as any : { color: '#6b7280', backgroundColor: '#f9fafb', borderColor: '#e5e7eb' } as any}
+              title={linkedNovelName || '选择要提炼的小说和章节'}
+            >
+              <BookMarked className="w-3 h-3" />
+              <span className="max-w-[100px] truncate">{linkedNovelName || '关联小说'}</span>
+              {linkedChapterCount > 0 && (
+                <span className="text-[9px] opacity-60">{linkedChapterCount}章</span>
+              )}
+            </button>
             {/* 导出配置 */}
             <button
               onClick={() => {
@@ -1583,18 +1816,18 @@ export default function ExtractPage() {
         <div className="fixed inset-0 z-50 flex items-start justify-center pt-8 bg-black/30 backdrop-blur-sm">
           <div className="w-[900px] max-h-[92vh] min-h-[600px] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden">
             {/* 精致化顶部标题栏 */}
-            <div className="shrink-0 flex items-center justify-between px-5 py-3 bg-slate-50 border-b border-slate-200">
+            <div className="shrink-0 flex items-center justify-between px-5 py-3 bg-gray-50 border-b border-gray-200">
               <div className="flex items-center gap-3">
                 {isProcessing ? (
                   <div className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 text-sky-500 animate-spin" />
-                    <h3 className="text-sm font-bold text-slate-800">提炼中</h3>
+                    <Loader2 className="w-4 h-4 text-[#0084ff] animate-spin" />
+                    <h3 className="text-sm font-bold text-gray-800">提炼中</h3>
                     {/* 进度 */}
-                    <span className="text-xs text-slate-500 bg-white px-2 py-0.5 rounded-full border border-slate-200">
+                    <span className="text-xs text-gray-400">
                       {progress.current} / {progress.total}
                     </span>
                     {/* 模型标签 */}
-                    <span className="flex items-center gap-1.5 text-[10px] text-sky-600 bg-sky-50 border border-sky-100 px-2 py-0.5 rounded-full">
+                    <span className="flex items-center gap-1.5 text-[10px] text-[#0084ff] bg-[#0084ff]/5 border border-[#0084ff]/15 px-2 py-0.5 rounded-full">
                       <Bot className="w-3 h-3" />
                       {(() => {
                         const effectiveModelId = selectedModel || getDefaultModelId();
@@ -1619,32 +1852,33 @@ export default function ExtractPage() {
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="flex-1 overflow-hidden min-h-0">
+            {/* ═══ 主内容区（flex-1 flex flex-col，确保填满剩余空间）═══ */}
+            <div className="flex-1 flex flex-col min-h-0">
               {plotPoints.length === 0 && !isProcessing && (
                 <div className="text-center text-gray-400 py-8">暂无提炼结果</div>
               )}
               {plotPoints.length === 0 && isProcessing && (
-                <div className="h-full p-4">
-                  <div className="h-full border border-gray-400 rounded-lg overflow-hidden flex flex-col">
-                    <div className="px-3 py-1.5 bg-brand-light border-b border-gray-300 flex items-center gap-2">
-                      <span className="text-[10px] font-bold text-brand">剧情点 1</span>
+                <div className="flex-1 p-4 flex flex-col min-h-0">
+                  <div className="flex-1 flex flex-col min-h-0 border border-gray-300 rounded-xl overflow-hidden bg-white shadow-sm">
+                    <div className="shrink-0 px-4 py-2 bg-[#0084ff]/5 border-b border-gray-200 flex items-center gap-2">
+                      <span className="text-[10px] font-bold text-[#0084ff]">剧情点 1</span>
                       <span className="ml-auto flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-                        <span className="text-[9px] text-green-600">输出中</span>
+                        <span className="w-1.5 h-1.5 bg-[#0084ff] rounded-full animate-pulse" />
+                        <span className="text-[9px] text-[#0084ff]">输出中</span>
                       </span>
                     </div>
-                    <div className="flex-1 p-3 text-[13px] text-gray-300 overflow-y-auto">
+                    <div className="flex-1 p-4 text-[13px] text-gray-400 overflow-y-auto">
                       <span>等待AI输出...</span>
-                      <span className="inline-block w-2 h-4 bg-brand ml-0.5 animate-pulse align-middle" />
+                      <span className="inline-block w-2 h-4 bg-[#0084ff]/50 ml-0.5 animate-pulse align-middle rounded-sm" />
                     </div>
                   </div>
                 </div>
               )}
               {plotPoints.length > 0 && (
-                /* ═══ Master-Detail：左侧数字格子 + 右侧详情 ═══ */
+                /* ═══ Master-Detail：左侧数字格子 + 右侧一体化卡片 ═══ */
                 <div className="flex flex-1 min-h-0">
-                  {/* 左侧：紧凑数字格子 */}
-                  <div className="w-[140px] shrink-0 border-r border-slate-200 flex flex-col">
+                  {/* 左侧：紧凑数字格子（在底部按钮上方截止） */}
+                  <div className="w-[180px] shrink-0 border-r border-gray-200 flex flex-col">
                     <MasterList
                       plotPoints={plotPoints}
                       activeIdx={activeIdx}
@@ -1653,8 +1887,8 @@ export default function ExtractPage() {
                       isProcessing={isProcessing}
                     />
                   </div>
-                  {/* 右侧：详情预览 */}
-                  <div className="flex-1 flex flex-col min-h-0 p-4 bg-slate-50/50 overflow-hidden">
+                  {/* 右侧：一体化卡片详情 */}
+                  <div className="flex-1 flex flex-col min-h-0 p-5 overflow-hidden">
                     <DetailCard
                       point={plotPoints[activeIdx]}
                       activeIdx={activeIdx}
@@ -1663,8 +1897,8 @@ export default function ExtractPage() {
                 </div>
               )}
             </div>
-            {/* 精致化底部按钮栏 */}
-            <div className="shrink-0 px-5 py-3 bg-slate-50 border-t border-slate-200 flex justify-end gap-2">
+            {/* 底部通栏按钮栏 */}
+            <div className="shrink-0 px-5 py-3 bg-white border-t border-gray-200 flex justify-end gap-2">
               {isProcessing ? (
                 <button onClick={handleAbort} disabled={isAborting}
                   className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-red-600 bg-white border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50 transition-colors shadow-sm">
@@ -1890,6 +2124,16 @@ export default function ExtractPage() {
           </div>
         </div>
       )}
+
+      {/* ═══════ 关联小说弹窗 ═══════ */}
+      <LinkNovelExtractModal
+        isOpen={showLinkNovel}
+        onClose={() => setShowLinkNovel(false)}
+        onLink={(novelId, chapterIds) => {
+          setLinkedNovelId(novelId);
+          setLinkedChapterCount(chapterIds.length);
+        }}
+      />
     </div>
   );
 }
