@@ -14,6 +14,7 @@ function exportBackup() {
     'xinyuexia_volumes_v1',
     'xinyuexia_extract_modules_v1',
     'xinyuexia_plot_library_v1',
+    'xinyuexia_materials_v1',
     'xinyuexia_workbench_notes',
   ];
   const data = Object.fromEntries(keys.map((key) => [key, localStorage.getItem(key)]));
