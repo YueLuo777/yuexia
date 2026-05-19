@@ -12,6 +12,7 @@ import {
   closestCorners,
   KeyboardSensor,
   PointerSensor,
+  useDndContext,
   useDroppable,
   useSensor,
   useSensors,
@@ -480,29 +481,40 @@ function ModuleDropZone({
   children,
   isEmpty,
   emptyText,
+  overClassName,
+  hintText,
 }: {
   id: string;
   children: React.ReactNode;
   isEmpty: boolean;
   emptyText: string;
+  overClassName: string;
+  hintText: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
+  const { active } = useDndContext();
+  const isActiveDrag = !!active;
 
   return (
     <div
       ref={setNodeRef}
-      className={`min-h-[56px] rounded-lg transition-all ${
-        isOver ? 'bg-brand-light/40 ring-2 ring-brand/25' : ''
+      className={`min-h-[56px] rounded-lg border border-dashed transition-all ${
+        isOver ? overClassName : isActiveDrag ? 'border-gray-200 bg-white/70' : 'border-transparent'
       }`}
     >
+      {!isEmpty && isOver && (
+        <div className="mx-2 mt-2 rounded-md border border-current/15 bg-white/85 px-2 py-1 text-[10px] font-medium tracking-wide">
+          {hintText}
+        </div>
+      )}
       {isEmpty ? (
         <div className={`mx-2 my-1 flex min-h-[56px] items-center justify-center rounded-lg border border-dashed text-[11px] transition-all ${
-          isOver ? 'border-brand text-brand bg-brand-light/30' : 'border-gray-200 text-gray-400'
+          isOver ? overClassName : 'border-gray-200 text-gray-400'
         }`}>
           {emptyText}
         </div>
       ) : (
-        children
+        <div className="pb-1">{children}</div>
       )}
     </div>
   );
@@ -1348,6 +1360,8 @@ export default function ExtractPage() {
                   id={SYSTEM_ZONE_ID}
                   isEmpty={systemKeys.length === 0}
                   emptyText={'\u62d6\u5230\u8fd9\u91cc\uff0c\u79fb\u5165\u7cfb\u7edf\u6307\u4ee4'}
+                  overClassName="border-amber-400 bg-amber-50/80 text-amber-700 ring-2 ring-amber-200 shadow-[inset_0_0_0_1px_rgba(251,191,36,0.35)]"
+                  hintText="松开后移入系统指令"
                 >
                   {systemKeys.map(id => {
                     const mod = allModules[id]; if (!mod) return null;
@@ -1375,6 +1389,8 @@ export default function ExtractPage() {
                   id={OUTPUT_ZONE_ID}
                   isEmpty={outputKeys.length === 0}
                   emptyText={'\u62d6\u5230\u8fd9\u91cc\uff0c\u79fb\u5165\u8f93\u51fa\u6a21\u5757'}
+                  overClassName="border-sky-400 bg-sky-50/80 text-sky-700 ring-2 ring-sky-200 shadow-[inset_0_0_0_1px_rgba(56,189,248,0.35)]"
+                  hintText="松开后移入输出模块"
                 >
                   {outputKeys.map(id => {
                     const mod = allModules[id]; if (!mod) return null;

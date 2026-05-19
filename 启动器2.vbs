@@ -46,7 +46,7 @@ If IsPortReady(Port) Then
     WScript.Quit 0
 End If
 
-Cmd = "cmd /c cd /d """ & ProjPath & """ && node launcher\dev-launcher.cjs"
+Cmd = "node """ & ProjPath & "\launcher\dev-launcher.cjs"""
 WshShell.Run Cmd, 0, False
 
 WScript.Quit 0

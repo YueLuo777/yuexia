@@ -1,4 +1,4 @@
-// Novel Workbench - Dev mode launcher (HMR + auto shutdown on browser close)
+// Novel Workbench - Dev mode launcher (silent background Vite + browser open)
 
 const { spawn, exec } = require('child_process');
 const http = require('http');
@@ -6,15 +6,11 @@ const fs = require('fs');
 const path = require('path');
 
 const PORT = 17328;
-const POLL_INTERVAL = 3000;
-const IDLE_GRACE = 15000;
-const LOG_PATH = path.join(__dirname, 'dev-launcher.log');
+const OPEN_URL = `http://localhost:${PORT}/#/dashboard`;
 const PROJECT_ROOT = path.join(__dirname, '..');
-const VITE_BIN = process.platform === 'win32'
-  ? path.join(PROJECT_ROOT, 'node_modules', '.bin', 'vite.cmd')
-  : path.join(PROJECT_ROOT, 'node_modules', '.bin', 'vite');
-
-let idleSince = null;
+const LOG_PATH = path.join(__dirname, 'dev-launcher.log');
+const PID_PATH = path.join(__dirname, 'dev-launcher.pid');
+const VITE_ENTRY = path.join(PROJECT_ROOT, 'node_modules', 'vite', 'bin', 'vite.js');
 
 function writeLogLine(level, message) {
   const line = `[${new Date().toISOString()}] [${level}] ${message}`;
@@ -22,125 +18,85 @@ function writeLogLine(level, message) {
 }
 
 function log(message) {
-  console.log(message);
   writeLogLine('INFO', message);
 }
 
 function logError(message) {
-  console.error(message);
   writeLogLine('ERROR', message);
 }
 
-function fetch(url) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function fetchHealth() {
   return new Promise((resolve, reject) => {
-    http.get(url, (res) => {
-      let data = '';
-      res.on('data', (chunk) => data += chunk);
-      res.on('end', () => resolve(data.trim()));
-    }).on('error', reject);
+    const req = http.get(`http://localhost:${PORT}/health`, (res) => {
+      const ok = res.statusCode && res.statusCode >= 200 && res.statusCode < 400;
+      res.resume();
+      ok ? resolve(true) : reject(new Error(`status ${res.statusCode}`));
+    });
+    req.on('error', reject);
+    req.setTimeout(1500, () => req.destroy(new Error('timeout')));
   });
 }
 
 async function waitForServer() {
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 40; i += 1) {
     try {
-      await fetch(`http://localhost:${PORT}/`);
+      await fetchHealth();
       log('[Launcher] Dev server is ready');
       return true;
-    } catch {}
-    await sleep(1500);
+    } catch {
+      await sleep(1500);
+    }
   }
   logError('[Launcher] Timeout waiting for dev server');
   return false;
 }
 
-function sleep(ms) {
-  return new Promise((r) => setTimeout(r, ms));
+function openBrowser() {
+  return new Promise((resolve) => {
+    exec(`explorer.exe "${OPEN_URL}"`, { windowsHide: true }, () => resolve());
+  });
+}
+
+function spawnViteDetached() {
+  const out = fs.openSync(LOG_PATH, 'a');
+  const err = fs.openSync(LOG_PATH, 'a');
+  const child = spawn(process.execPath, [VITE_ENTRY], {
+    cwd: PROJECT_ROOT,
+    detached: true,
+    shell: false,
+    stdio: ['ignore', out, err],
+    windowsHide: true,
+  });
+  child.unref();
+  fs.writeFileSync(PID_PATH, String(child.pid));
+  log(`[Launcher] Spawned Vite pid=${child.pid}`);
 }
 
 async function main() {
   fs.writeFileSync(LOG_PATH, '');
 
-  if (!fs.existsSync(VITE_BIN)) {
-    logError('[Launcher] Missing local dependencies: node_modules/.bin/vite not found');
+  if (!fs.existsSync(VITE_ENTRY)) {
+    logError('[Launcher] Missing local dependencies: vite entry not found');
     logError('[Launcher] Run "cmd /c npm install" in the project root, then retry');
     process.exit(1);
   }
 
-  log('[Launcher] Starting Vite dev server...');
-
-  const vite = process.platform === 'win32'
-    ? spawn('cmd.exe', ['/d', '/s', '/c', 'npm run dev'], {
-        stdio: 'inherit',
-        shell: false,
-        cwd: PROJECT_ROOT,
-        windowsHide: true,
-      })
-    : spawn('npm', ['run', 'dev'], {
-        stdio: 'inherit',
-        shell: false,
-        cwd: PROJECT_ROOT,
-        windowsHide: true,
-      });
-
-  vite.on('error', (err) => {
-    logError(`[Launcher] Failed to start npm: ${err.message}`);
-  });
+  log('[Launcher] Starting Vite dev server in background...');
+  spawnViteDetached();
 
   const ready = await waitForServer();
   if (!ready) {
-    vite.kill();
     process.exit(1);
   }
 
-  log('[Launcher] Opening browser...');
-  exec(`start http://localhost:${PORT}`, { windowsHide: true });
-
-  // Wait for browser to connect and establish HMR WebSocket
-  await sleep(3000);
-
-  log('[Launcher] Monitoring browser connection...');
-  log('[Launcher] Will auto-stop server when browser closes');
-
-  // Monitor HMR client count
-  while (true) {
-    await sleep(POLL_INTERVAL);
-
-    let count;
-    try {
-      const result = await fetch(`http://localhost:${PORT}/__hmr_clients`);
-      count = parseInt(result, 10);
-      if (isNaN(count)) count = 0;
-    } catch {
-      log('[Launcher] Server connection lost');
-      break;
-    }
-
-    if (count === 0) {
-      if (idleSince === null) {
-        idleSince = Date.now();
-        log(`[Launcher] No browser connected, waiting ${IDLE_GRACE / 1000} seconds before shutdown...`);
-      }
-      const elapsed = Date.now() - idleSince;
-      if (elapsed >= IDLE_GRACE) {
-        log('[Launcher] Browser closed, shutting down dev server...');
-        vite.kill('SIGTERM');
-        await sleep(2000);
-        try { vite.kill('SIGKILL'); } catch {}
-        log('[Launcher] Dev server stopped');
-        process.exit(0);
-      }
-    } else {
-      if (idleSince !== null) {
-        log(`[Launcher] Browser reconnected (${count} clients)`);
-      }
-      idleSince = null;
-    }
-  }
+  log(`[Launcher] Opening browser: ${OPEN_URL}`);
+  await openBrowser();
+  process.exit(0);
 }
-
-process.on('SIGINT', () => process.exit(0));
-process.on('SIGTERM', () => process.exit(0));
 
 main().catch((err) => {
   logError(`[Launcher] Error: ${err.stack || err.message}`);
