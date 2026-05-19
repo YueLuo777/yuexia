@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// 模块化提炼引擎 v2 — 双区域：系统指令区 + 输出模块区
+// 模块化提炼引擎 v3 — Markdown文本输出模式
 // ═══════════════════════════════════════════════════════════════
 
 export interface ModuleDef {
@@ -8,22 +8,28 @@ export interface ModuleDef {
   instruction: string;
   description?: string;
   builtIn?: boolean;
-  /** false=系统指令区（告诉AI但不输出JSON）, true=输出模块区（告诉AI且输出JSON） */
+  /** false=系统指令区, true=输出模块区 */
   output: boolean;
 }
 
-export interface ExtractedPlotPoint {
-  [key: string]: string | undefined;
-  _raw?: string;
+/** 提炼结果：纯文本/Markdown 格式 */
+export interface ExtractResult {
+  /** 该批次对应的章节标题 */
+  chapterTitle: string;
+  /** AI返回的纯文本/Markdown内容 */
+  content: string;
 }
 
 export interface PromptBuildResult {
   systemPrompt: string;
   userPrompt: string;
-  /** 需要AI输出的模块key列表（输出模块区的模块） */
+  /** 输出模块区的模块key列表 */
   outputKeys: string[];
 }
 
+/**
+ * 构建提示词 — 要求AI输出Markdown文本格式
+ */
 export function buildPrompt(
   systemModuleKeys: string[],
   outputModuleKeys: string[],
@@ -33,36 +39,68 @@ export function buildPrompt(
   const systemMods = systemModuleKeys.map(k => allModules[k]).filter(Boolean);
   const outputMods = outputModuleKeys.map(k => allModules[k]).filter(Boolean);
 
-  // System Prompt：包含所有模块的 instruction（系统指令区 + 输出模块区）
+  // System Prompt：包含所有模块的 instruction
   const allInstructions = [...systemMods, ...outputMods].map(m => m.instruction).join('\n\n');
 
-  // 只有输出模块区的模块才需要AI输出JSON字段
+  // 输出模块区的模块key
   const outputKeys = outputMods.map(m => m.key);
-  const jsonKeys = outputMods.map(m => `"${m.key}": "..."`).join(',\n    ');
+
+  // 生成模块标签对照表
+  const labelList = outputMods.map(m => `- **#${m.label}**：${m.instruction.slice(0, 60)}...`).join('\n');
 
   const systemPrompt = `你是一位资深的小说剧情结构分析师，精通网文节奏拆解、克苏鲁/仙侠/都市等全题材套路逻辑。你的任务是将小说章节提炼为极致精简的"剧情点调用卡"。
 
 铁律：
 1. 变量占位原则：严禁出现章节中的具体名字。所有具体人名、地名、物品、功法、组织必须使用【】包裹并抽象化。
-2. 输出格式：严格输出JSON数组，每个元素是一个对象。
-3. 如果本章纯属日常过渡、设定说明或无意义注水，且无实质冲突或转折，输出空数组 []。
-4. 语言：保持中文输出。
+2. 输出格式：使用 Markdown 纯文本格式输出，每个剧情点用清晰的分隔线隔开。
+3. 标题使用标准的 Markdown 语法：用 # 表示一级标题，## 表示二级标题，以此类推。严禁使用 ## # 这种重复叠加的标题符号。
+4. 如果本章纯属日常过渡、设定说明或无意义注水，且无实质冲突或转折，输出"无实质剧情点"。
+5. 语言：保持中文输出。
 
 ${allInstructions}`;
 
-  const userPrompt = `请阅读以下网文章节，按上述规则提炼剧情点。请严格按以下JSON格式输出（每个剧情点是一个JSON对象，放在数组中）：
+  const userPrompt = `请阅读以下网文章节，按上述规则提炼剧情点。
 
-[\n  {\n    ${jsonKeys}\n  }\n]\n\n章节内容：\n\n${chapterContent}`;
+输出模块清单（每个模块对应一个 #标题，全部属于同一个剧情点）：
+${labelList}
+
+输出要求：
+- 使用 Markdown 格式
+- 一个章节默认只提炼一个剧情点，该剧情点包含上面所有模块的内容
+- 同一个剧情点内的不同模块之间**不需要任何分隔符**，连续输出即可
+- 只有当章节内存在多个独立事件/转折时，才用 --- 分隔为多个剧情点
+- 标题用 # 开头（如：# 评分）
+- 严禁输出 JSON 格式
+- 严禁使用 ## # 这种叠加标题
+
+章节内容：
+
+${chapterContent}`;
 
   return { systemPrompt, userPrompt, outputKeys };
 }
 
-export function parseAiResponse(text: string): ExtractedPlotPoint[] | null {
-  try {
-    const m = text.match(/\[[\s\S]*\]/);
-    if (!m) return null;
-    const parsed = JSON.parse(m[0]);
-    if (Array.isArray(parsed)) return parsed;
-  } catch { /* */ }
-  return null;
+/**
+ * 清理AI返回文本中的格式问题
+ * 1. 将 ## #、### # 等叠加标题替换为标准 #
+ * 2. 清理多余空行
+ */
+export function cleanAiResponse(text: string): string {
+  if (!text) return '';
+  return text
+    // 将 ## #、### #、#### # 等叠加标题替换为标准 #
+    .replace(/^#+\s*#/gm, '#')
+    // 清理连续3个以上的空行
+    .replace(/\n{4,}/g, '\n\n\n')
+    .trim();
+}
+
+/**
+ * 将AI返回的文本按 --- 分隔线拆分为单个剧情点
+ * 返回文本数组，每个元素是一个剧情点的Markdown内容
+ */
+export function splitResults(text: string): string[] {
+  if (!text || text.trim() === '' || text.trim() === '无实质剧情点') return [];
+  const parts = text.split(/\n?---+\n?/).map(s => s.trim()).filter(s => s.length > 0);
+  return parts.length > 0 ? parts : [text.trim()];
 }

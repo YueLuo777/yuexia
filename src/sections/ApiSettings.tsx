@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect, useCallback } from 'react';
 import {
-  Server, Bot, Eye, EyeOff, Trash2,
+  Server, Bot, Eye, EyeOff, Trash2, GripVertical,
   CheckCircle, Plus, X, Copy, Pencil, Power, PowerOff, Lock, Unlock, Wifi,
 } from 'lucide-react';
 import { addRecord } from '@/hooks/useCallRecords';
@@ -171,6 +171,7 @@ export default function ApiSettings() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingModel, setEditingModel] = useState<ApiModelConfig | null>(null);
   const [toast, setToast] = useState<{ text: string; show: boolean }>({ text: '', show: false });
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // 静默自动保存
   useEffect(() => {
@@ -327,13 +328,37 @@ export default function ApiSettings() {
             {settings.models.length === 0 && (
               <span className="text-xs text-gray-400">暂无模型，请点击新增</span>
             )}
+            {settings.models.length > 1 && (
+              <span className="text-xs text-gray-400 flex items-center gap-1">
+                <GripVertical className="w-3 h-3" />
+                拖拽卡片可调整模型顺序
+              </span>
+            )}
           </div>
           {settings.models.length > 0 && (
             <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-5">
-              {settings.models.map((model) => (
+              {settings.models.map((model, index) => (
                 <div
                   key={model.id}
-                  className="bg-white rounded-lg border border-gray-200 p-[21px] hover:border-gray-300 transition-colors"
+                  draggable
+                  onDragStart={() => { /* 记录拖拽起始索引 */ (window as any).__dragModelIndex = index; }}
+                  onDragOver={(e) => { e.preventDefault(); setDragOverIndex(index); }}
+                  onDragLeave={() => setDragOverIndex(null)}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const from = (window as any).__dragModelIndex;
+                    const to = index;
+                    setDragOverIndex(null);
+                    if (from === undefined || from === to) return;
+                    setSettings(prev => {
+                      const newModels = [...prev.models];
+                      const [moved] = newModels.splice(from, 1);
+                      newModels.splice(to, 0, moved);
+                      return { ...prev, models: newModels };
+                    });
+                    showToast('已调整排序');
+                  }}
+                  className={`bg-white rounded-lg border p-[21px] transition-colors cursor-grab active:cursor-grabbing hover:border-gray-300 ${dragOverIndex === index ? 'border-brand ring-1 ring-brand' : 'border-gray-200'}`}
                 >
                   {/* 卡片头部 */}
                   <div className="flex items-center gap-2.5 mb-4">
@@ -410,6 +435,7 @@ export default function ApiSettings() {
             </div>
           )}
         </div>
+
       </div>
 
       {/* 新增/编辑模型弹窗 */}
