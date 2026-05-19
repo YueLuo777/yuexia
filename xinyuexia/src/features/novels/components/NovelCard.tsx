@@ -1,4 +1,4 @@
-import { BookOpen, Image, Trash2 } from 'lucide-react';
+import { Image } from 'lucide-react';
 
 import type { Novel } from '@/features/novels/model/novelTypes';
 
@@ -11,51 +11,67 @@ interface NovelCardProps {
 }
 
 export function NovelCard({ novel, isSelected, onOpen, onRename, onDelete }: NovelCardProps) {
-  const typeLabel = novel.type === 'novel' ? '小说' : '剧本';
-
   return (
-    <article className={`group flex w-[220px] flex-col overflow-hidden rounded-xl border bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${isSelected ? 'border-orange-300 ring-2 ring-orange-100' : 'border-gray-100'}`}>
-      <button
-        onClick={() => onOpen(novel.id)}
-        className="relative h-[132px] bg-gradient-to-br from-brand-light via-white to-orange-50 text-left"
+    <article
+      onClick={() => onOpen(novel.id)}
+      className={`group flex w-[220px] cursor-pointer flex-col rounded-[24px] border border-gray-100 bg-white p-3 transition-shadow hover:shadow-xl ${
+        isSelected ? 'ring-2 ring-orange-100' : ''
+      }`}
+      style={{ minHeight: 360 }}
+    >
+      <div
+        className="relative flex h-[250px] shrink-0 flex-col items-center justify-center overflow-hidden rounded-[20px]"
+        style={{ background: 'linear-gradient(135deg, #f0fdf4 0%, #fefce8 100%)' }}
       >
         {novel.cover ? (
-          <img src={novel.cover} alt={novel.title} className="h-full w-full object-cover" />
+          <img src={novel.cover} alt="封面" className="h-full w-full object-cover" />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center text-brand-dark">
-            <BookOpen className="mb-2 h-9 w-9" />
-            <span className="text-xs font-medium">{typeLabel}</span>
+          <div className="flex flex-col items-center justify-center">
+            <div className="mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-white/60">
+              <Image className="h-5 w-5 text-teal-600" />
+            </div>
+            <p className="mb-3 text-xs font-medium text-teal-700">暂无封面</p>
           </div>
         )}
-        <span className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-medium text-gray-600 shadow-sm">
-          {novel.category}
-        </span>
-      </button>
+      </div>
 
-      <div className="flex flex-1 flex-col p-3">
-        <h3 className="truncate text-sm font-bold text-gray-900" title={novel.title}>{novel.title}</h3>
-        <p className="mt-1 line-clamp-2 h-9 text-xs leading-relaxed text-gray-400">{novel.synopsis || '暂无简介'}</p>
-
-        <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-gray-500">
-          <div>
-            <p className="text-[10px] text-gray-400">字数</p>
-            <p className="font-medium text-gray-700">{novel.wordCount}</p>
-          </div>
-          <div>
-            <p className="text-[10px] text-gray-400">修改</p>
-            <p className="font-medium text-gray-700">{novel.lastModifiedAt}</p>
-          </div>
+      <div className="flex flex-1 flex-col px-1 pb-1 pt-3">
+        <h3 className="mb-2 truncate text-sm font-bold text-gray-900" title={novel.title}>{novel.title}</h3>
+        <div className="mb-3 flex items-center justify-between text-xs text-gray-400">
+          <span>{novel.wordCount}字</span>
+          <span>{novel.lastModifiedAt || novel.createdAt}</span>
         </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-1.5">
-          <button onClick={() => onRename(novel.id, novel.title)} className="rounded-md bg-brand px-2 py-1.5 text-xs text-white transition-colors hover:bg-brand-dark">
+        <div className="mt-auto grid grid-cols-4 gap-1">
+          <button
+            onClick={(event) => {
+              event.stopPropagation();
+              onRename(novel.id, novel.title);
+            }}
+            className="rounded-lg bg-[#08B3D9] py-1.5 text-xs text-white transition-colors hover:bg-[#07a0c2]"
+          >
             重命名
           </button>
-          <button className="flex items-center justify-center rounded-md bg-brand px-2 py-1.5 text-xs text-white transition-colors hover:bg-brand-dark" title="封面">
-            <Image className="h-3.5 w-3.5" />
+          <button
+            onClick={(event) => event.stopPropagation()}
+            className="rounded-lg bg-[#08B3D9] py-1.5 text-xs text-white transition-colors hover:bg-[#07a0c2]"
+          >
+            封面
           </button>
-          <button onClick={() => onDelete(novel.id)} className="flex items-center justify-center rounded-md bg-red-500 px-2 py-1.5 text-xs text-white transition-colors hover:bg-red-600" title="删除">
-            <Trash2 className="h-3.5 w-3.5" />
+          <button
+            onClick={(event) => event.stopPropagation()}
+            className="rounded-lg bg-[#08B3D9] py-1.5 text-xs text-white transition-colors hover:bg-[#07a0c2]"
+          >
+            导出
+          </button>
+          <button
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete(novel.id);
+            }}
+            className="rounded-lg bg-red-500 py-1.5 text-xs text-white transition-colors hover:bg-red-600"
+          >
+            删除
           </button>
         </div>
       </div>

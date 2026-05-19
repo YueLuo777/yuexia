@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { ExtractPage } from '@/features/extract/pages/ExtractPage';
 import { NovelLibraryPage } from '@/features/novels/pages/NovelLibraryPage';
+import { PlotLibraryPage } from '@/features/plot-library/pages/PlotLibraryPage';
 import { WorkbenchPage } from '@/features/workbench/pages/WorkbenchPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { PlaceholderPage } from '@/pages/PlaceholderPage';
@@ -15,7 +16,7 @@ export default function App() {
         <Route path="/novels" element={<NovelLibraryPage />} />
         <Route path="/scripts" element={<NovelLibraryPage />} />
         <Route path="/extract" element={<ExtractPage />} />
-        <Route path="/plot-library" element={<PlaceholderPage title="剧情库" />} />
+        <Route path="/plot-library" element={<PlotLibraryPage />} />
         <Route path="/materials" element={<PlaceholderPage title="资料库" />} />
         <Route path="/prompts" element={<PlaceholderPage title="提示词管理" />} />
         <Route path="/model-manage" element={<PlaceholderPage title="模型管理" />} />

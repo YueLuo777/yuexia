@@ -60,7 +60,7 @@ export function NovelLibraryPage() {
   };
 
   return (
-    <div className="flex min-h-full flex-col bg-gray-50">
+    <div className="flex h-screen flex-col bg-gray-50">
       <main className="flex-1 overflow-y-auto p-6">
         <div className="mb-2 flex items-center justify-between">
           <div>
@@ -68,43 +68,46 @@ export function NovelLibraryPage() {
             <p className="mt-1 text-sm text-gray-400">共 {sourceNovels.length} 部{typeLabel}</p>
           </div>
           <div className="flex items-center gap-3">
-            <button className="flex items-center gap-1.5 rounded-md bg-brand px-4 py-2 text-sm text-white shadow-sm transition-colors hover:bg-brand-dark">
+            <button className="flex items-center gap-1.5 rounded-md bg-[#08B3D9] px-4 py-2 text-sm text-white shadow-sm transition-colors hover:bg-[#07a0c2]">
               <SlidersHorizontal className="h-4 w-4" />
               <span>作品卡片设置</span>
             </button>
-            <button className="flex items-center gap-1.5 rounded-md bg-brand px-4 py-2 text-sm text-white shadow-sm transition-colors hover:bg-brand-dark">
+            <button className="flex items-center gap-1.5 rounded-md bg-[#08B3D9] px-4 py-2 text-sm text-white shadow-sm transition-colors hover:bg-[#07a0c2]">
               <Upload className="h-4 w-4" />
               <span>导入</span>
             </button>
-            <button onClick={() => setIsNewOpen(true)} className="flex items-center gap-1.5 rounded-md bg-orange-500 px-4 py-2 text-sm text-white shadow-sm transition-colors hover:bg-orange-600">
-              <Plus className="h-4 w-4" />
-              <span>新建{typeLabel}</span>
-            </button>
-            <button onClick={() => setIsRecycleOpen(true)} className="flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-4 py-2 text-sm text-red-500 transition-colors hover:bg-red-50">
+            <button onClick={() => setIsRecycleOpen(true)} className="flex items-center gap-1.5 rounded-md bg-red-500 px-4 py-2 text-sm text-white shadow-sm transition-colors hover:bg-red-600">
               <Trash2 className="h-4 w-4" />
               <span>回收站</span>
+            </button>
+            <button onClick={() => setIsNewOpen(true)} className="flex items-center gap-1.5 rounded-md bg-[#08B3D9] px-4 py-2 text-sm text-white shadow-sm transition-colors hover:bg-[#07a0c2]">
+              <Plus className="h-4 w-4" />
+              <span>新建{typeLabel}</span>
             </button>
           </div>
         </div>
 
-        <div className="mb-5 flex items-center justify-between gap-4">
+        <div className="mb-6 flex items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2">
             {filters.map((filter) => (
               <button
                 key={filter}
                 onClick={() => setActiveFilter(filter)}
-                className={`rounded-full px-3 py-1.5 text-xs transition-colors ${
+                className={`flex items-center gap-1.5 rounded-full px-4 py-2 text-sm transition-colors ${
                   activeFilter === filter
                     ? 'bg-brand text-white'
                     : 'border border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
                 }`}
               >
-                {filter}
+                <span className="novel-tag-font">{filter}</span>
+                <span className={`text-xs ${activeFilter === filter ? 'text-white/70' : 'text-gray-400'}`}>
+                  {filter === '全部' ? sourceNovels.length : sourceNovels.filter((novel) => novel.category === filter).length}
+                </span>
               </button>
             ))}
           </div>
 
-          <label className="relative w-[260px] shrink-0">
+          <label className="relative w-[200px] shrink-0">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
             <input
               value={searchQuery}
@@ -123,7 +126,7 @@ export function NovelLibraryPage() {
             </button>
           </div>
         ) : (
-          <div className="flex flex-wrap gap-4">
+          <div className="flex flex-wrap gap-5">
             {filteredNovels.map((novel) => (
               <NovelCard
                 key={novel.id}

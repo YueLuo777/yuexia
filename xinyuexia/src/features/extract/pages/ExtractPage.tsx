@@ -1,4 +1,4 @@
-import { Download, Play, Sparkles } from 'lucide-react';
+import { Download, Library, Play, Sparkles } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { ChapterSelectPanel } from '@/features/extract/components/ChapterSelectPanel';
@@ -6,6 +6,7 @@ import { ExtractDropZone } from '@/features/extract/components/ExtractDropZone';
 import { useExtractModules } from '@/features/extract/hooks/useExtractModules';
 import { useExtractNovels } from '@/features/extract/hooks/useExtractNovels';
 import type { ExtractChapter, ExtractResult, ExtractZone } from '@/features/extract/model/extractTypes';
+import { savePlotItems } from '@/features/plot-library/hooks/usePlotLibrary';
 
 function createExcerpt(content: string) {
   const normalized = content.replace(/\s+/g, ' ').trim();
@@ -42,6 +43,7 @@ export function ExtractPage() {
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dragOverZone, setDragOverZone] = useState<ExtractZone | null>(null);
   const [results, setResults] = useState<ExtractResult[]>([]);
+  const [saveMessage, setSaveMessage] = useState('');
 
   useEffect(() => {
     if (selectedNovelId === null && novels.length > 0) {
@@ -114,11 +116,24 @@ export function ExtractPage() {
       };
     });
     setResults(nextResults);
+    setSaveMessage('');
   };
 
   const handleExport = () => {
     const text = results.map((result) => `${result.chapterTitle}\n\n${result.content}`).join('\n\n---\n\n');
     downloadText(`提炼剧情-${selectedNovel?.title ?? '未命名'}.txt`, text);
+  };
+
+  const handleSaveToLibrary = () => {
+    if (!selectedNovel || results.length === 0) return;
+    savePlotItems(results.map((result) => ({
+      title: result.chapterTitle,
+      chapter: result.chapterTitle,
+      novelTitle: selectedNovel.title,
+      content: result.content,
+      tags: activeOutputModules.map((module) => module.label),
+    })));
+    setSaveMessage(`已保存 ${results.length} 条到剧情库`);
   };
 
   return (
@@ -147,6 +162,14 @@ export function ExtractPage() {
           >
             <Download className="h-4 w-4" />
             导出
+          </button>
+          <button
+            onClick={handleSaveToLibrary}
+            disabled={results.length === 0}
+            className="flex items-center gap-1.5 rounded-lg border border-brand/30 bg-brand-light px-4 py-2 text-sm font-medium text-brand transition-colors hover:bg-brand/10 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-white disabled:text-gray-300"
+          >
+            <Library className="h-4 w-4" />
+            保存到剧情库
           </button>
         </div>
       </header>
@@ -219,7 +242,7 @@ export function ExtractPage() {
           <section className="min-h-[220px] overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
               <h2 className="text-sm font-bold text-gray-900">提炼结果</h2>
-              <span className="text-xs text-gray-400">{results.length} 条</span>
+              <span className="text-xs text-gray-400">{saveMessage || `${results.length} 条`}</span>
             </div>
             <div className="max-h-[280px] overflow-y-auto p-4">
               {results.length === 0 ? (
