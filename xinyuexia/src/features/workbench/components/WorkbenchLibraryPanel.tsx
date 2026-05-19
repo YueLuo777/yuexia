@@ -1,13 +1,13 @@
 import { Plus, Trash2 } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
-interface LibraryEntry {
-  id: string;
-  tab: string;
-  title: string;
-  content: string;
-  updatedAt: string;
-}
+import {
+  WORKBENCH_LIBRARY_UPDATED_EVENT,
+  createWorkbenchLibraryEntry,
+  readWorkbenchLibraryEntries,
+  writeWorkbenchLibraryEntries,
+  type WorkbenchLibraryEntry,
+} from '@/features/workbench/model/workbenchLibraryStorage';
 
 interface WorkbenchLibraryPanelProps {
   storageKey: string;
@@ -15,45 +15,42 @@ interface WorkbenchLibraryPanelProps {
   emptyText: string;
 }
 
-function readEntries(storageKey: string): LibraryEntry[] {
-  try {
-    const raw = localStorage.getItem(storageKey);
-    return raw ? JSON.parse(raw) as LibraryEntry[] : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeEntries(storageKey: string, entries: LibraryEntry[]) {
-  localStorage.setItem(storageKey, JSON.stringify(entries));
-}
-
-function createEntry(tab: string): LibraryEntry {
-  return {
-    id: `entry-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    tab,
-    title: `新建${tab}`,
-    content: '',
-    updatedAt: new Date().toLocaleString('zh-CN'),
-  };
-}
-
 export function WorkbenchLibraryPanel({ storageKey, tabs, emptyText }: WorkbenchLibraryPanelProps) {
-  const [entries, setEntries] = useState<LibraryEntry[]>(() => readEntries(storageKey));
+  const [entries, setEntries] = useState<WorkbenchLibraryEntry[]>(() => readWorkbenchLibraryEntries(storageKey));
   const [activeTab, setActiveTab] = useState(tabs[0] ?? '');
   const visibleEntries = useMemo(() => entries.filter((entry) => entry.tab === activeTab), [activeTab, entries]);
   const selectedEntry = visibleEntries[0] ?? null;
 
-  const persist = (next: LibraryEntry[]) => {
+  useEffect(() => {
+    setEntries(readWorkbenchLibraryEntries(storageKey));
+
+    const syncEntries = (event: Event) => {
+      if (event instanceof CustomEvent && event.detail?.storageKey !== storageKey) return;
+      setEntries(readWorkbenchLibraryEntries(storageKey));
+    };
+    const syncStorageEntries = (event: StorageEvent) => {
+      if (event.key && event.key !== storageKey) return;
+      setEntries(readWorkbenchLibraryEntries(storageKey));
+    };
+
+    window.addEventListener(WORKBENCH_LIBRARY_UPDATED_EVENT, syncEntries);
+    window.addEventListener('storage', syncStorageEntries);
+    return () => {
+      window.removeEventListener(WORKBENCH_LIBRARY_UPDATED_EVENT, syncEntries);
+      window.removeEventListener('storage', syncStorageEntries);
+    };
+  }, [storageKey]);
+
+  const persist = (next: WorkbenchLibraryEntry[]) => {
     setEntries(next);
-    writeEntries(storageKey, next);
+    writeWorkbenchLibraryEntries(storageKey, next);
   };
 
   const addEntry = () => {
-    persist([createEntry(activeTab), ...entries]);
+    persist([createWorkbenchLibraryEntry(activeTab, `新建${activeTab}`), ...entries]);
   };
 
-  const updateEntry = (id: string, updates: Partial<Pick<LibraryEntry, 'title' | 'content'>>) => {
+  const updateEntry = (id: string, updates: Partial<Pick<WorkbenchLibraryEntry, 'title' | 'content'>>) => {
     persist(entries.map((entry) => entry.id === id
       ? { ...entry, ...updates, updatedAt: new Date().toLocaleString('zh-CN') }
       : entry));

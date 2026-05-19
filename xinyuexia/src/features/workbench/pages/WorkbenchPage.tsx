@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 
+import { savePlotItems } from '@/features/plot-library/hooks/usePlotLibrary';
 import { ChapterEditor } from '@/features/workbench/components/ChapterEditor';
 import { ChapterRecycleModal } from '@/features/workbench/components/ChapterRecycleModal';
 import { ChapterSidebar } from '@/features/workbench/components/ChapterSidebar';
@@ -9,8 +10,10 @@ import { WorkbenchHeader } from '@/features/workbench/components/WorkbenchHeader
 import { WorkbenchLibraryPanel } from '@/features/workbench/components/WorkbenchLibraryPanel';
 import { WorkbenchModal } from '@/features/workbench/components/WorkbenchModal';
 import { useWorkbenchData } from '@/features/workbench/hooks/useWorkbenchData';
+import { addWorkbenchLibraryEntry } from '@/features/workbench/model/workbenchLibraryStorage';
 
 type ModalKey = 'workInfo' | 'extract' | 'settings' | 'outline' | 'notes';
+type AIResultAction = 'replace' | 'append' | 'setting' | 'outline' | 'plot';
 
 export function WorkbenchPage() {
   const [isRecycleOpen, setIsRecycleOpen] = useState(false);
@@ -99,6 +102,43 @@ export function WorkbenchPage() {
   const selectedChapterTitle = selectedChapter?.chapter.title ?? null;
   const selectedWordCount = selectedChapter?.chapter.wordCount ?? 0;
   const chapterCount = volumes.reduce((sum, volume) => sum + volume.chapters.length, 0);
+  const aiResultTitle = selectedChapterTitle ?? currentNovel.title;
+
+  const handleApplyAIResult = (action: AIResultAction, content: string) => {
+    if (action === 'replace') {
+      saveContent(content);
+      return;
+    }
+    if (action === 'append') {
+      saveContent(editorContent.trim() ? `${editorContent}\n\n${content}` : content);
+      return;
+    }
+    if (action === 'setting') {
+      addWorkbenchLibraryEntry(
+        `xinyuexia_workbench_settings_${currentNovel.id}`,
+        '设定',
+        `AI设定-${aiResultTitle}`,
+        content,
+      );
+      return;
+    }
+    if (action === 'outline') {
+      addWorkbenchLibraryEntry(
+        `xinyuexia_workbench_outline_${currentNovel.id}`,
+        '章节概要',
+        `AI概要-${aiResultTitle}`,
+        content,
+      );
+      return;
+    }
+    savePlotItems([{
+      title: `AI剧情-${aiResultTitle}`,
+      chapter: selectedChapterTitle ?? '未选择章节',
+      novelTitle: currentNovel.title,
+      content,
+      tags: ['AI助手'],
+    }]);
+  };
 
   return (
     <div className="flex h-screen flex-col bg-gray-50">
@@ -139,7 +179,12 @@ export function WorkbenchPage() {
           <div className="h-8 w-[2px] rounded-full bg-gray-300 opacity-0 transition-opacity group-hover:opacity-100" />
         </div>
         <aside className="shrink-0 border-l border-gray-200 bg-white" style={{ width: aiPanelWidth }}>
-          <WorkbenchAIPanel selectedChapterTitle={selectedChapterTitle} selectedWordCount={selectedWordCount} />
+          <WorkbenchAIPanel
+            selectedChapterTitle={selectedChapterTitle}
+            selectedWordCount={selectedWordCount}
+            selectedChapterContent={editorContent}
+            onApplyResult={handleApplyAIResult}
+          />
         </aside>
       </div>
 
