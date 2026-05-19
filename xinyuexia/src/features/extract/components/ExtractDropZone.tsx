@@ -79,7 +79,7 @@ export function ExtractDropZone({
         ))}
         {modules.length === 0 && (
           <div className="flex h-full min-h-[120px] items-center justify-center text-xs text-gray-300">
-            松开后移入{title}
+            松开后可移动到这里
           </div>
         )}
       </div>

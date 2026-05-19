@@ -11,6 +11,9 @@ import { readModelSnapshot } from '@/features/models/hooks/useModels';
 import type { ModelItem } from '@/features/models/model/modelTypes';
 import { callModel } from '@/features/models/services/callModel';
 import { savePlotItems } from '@/features/plot-library/hooks/usePlotLibrary';
+import { addWorkbenchLibraryEntry } from '@/features/workbench/model/workbenchLibraryStorage';
+
+type ResultAction = 'plot' | 'setting' | 'outline';
 
 function createExcerpt(content: string) {
   const normalized = content.replace(/\s+/g, ' ').trim();
@@ -42,7 +45,7 @@ function buildSystemPrompt(modules: { label: string; instruction: string }[]) {
 function buildExtractRequest(chapter: ExtractChapter, modules: { label: string; instruction: string }[]) {
   const moduleText = modules.map((module) => `【${module.label}】\n${module.instruction.trim()}`).join('\n\n');
   return [
-    `请提炼以下章节的剧情信息。`,
+    '请提炼以下章节的剧情信息。',
     `章节：第${chapter.serialNumber}章 ${chapter.title || '未命名章节'}`,
     '',
     '【输出要求】',
@@ -57,6 +60,10 @@ function buildLocalPreview(chapter: ExtractChapter, modules: { label: string; in
   return modules
     .map((module) => `【${module.label}】\n${module.instruction}\n章节摘录：${createExcerpt(chapter.content)}`)
     .join('\n\n');
+}
+
+function buildResultTitle(chapter: ExtractChapter) {
+  return `第${chapter.serialNumber}章 ${chapter.title || '未命名章节'}`;
 }
 
 export function ExtractPage() {
@@ -172,7 +179,7 @@ export function ExtractPage() {
 
     for (let index = 0; index < selectedChapters.length; index += 1) {
       const chapter = selectedChapters[index];
-      const chapterTitle = `第${chapter.serialNumber}章 ${chapter.title || '未命名章节'}`;
+      const chapterTitle = buildResultTitle(chapter);
       setExtractProgress(`正在处理 ${index + 1}/${selectedChapters.length}：${chapterTitle}`);
 
       let content = '';
@@ -207,7 +214,7 @@ export function ExtractPage() {
     downloadText(`提炼剧情-${selectedNovel?.title ?? '未命名'}.txt`, text);
   };
 
-  const handleSaveToLibrary = () => {
+  const handleSaveToPlotLibrary = () => {
     if (!selectedNovel || results.length === 0) return;
     savePlotItems(results.map((result) => ({
       title: result.chapterTitle,
@@ -217,6 +224,27 @@ export function ExtractPage() {
       tags: activeOutputModules.map((module) => module.label),
     })));
     setSaveMessage(`已保存 ${results.length} 条到剧情库`);
+  };
+
+  const handleWriteBack = (action: ResultAction) => {
+    if (!selectedNovel || results.length === 0) return;
+
+    if (action === 'plot') {
+      handleSaveToPlotLibrary();
+      return;
+    }
+
+    const storageKey = action === 'setting'
+      ? `xinyuexia_workbench_settings_${selectedNovel.id}`
+      : `xinyuexia_workbench_outline_${selectedNovel.id}`;
+    const tab = action === 'setting' ? '设定' : '章节概要';
+    const titlePrefix = action === 'setting' ? '提炼设定' : '提炼概要';
+
+    for (const result of results) {
+      addWorkbenchLibraryEntry(storageKey, tab, `${titlePrefix}-${result.chapterTitle}`, result.content);
+    }
+
+    setSaveMessage(`已写入 ${results.length} 条到${action === 'setting' ? '设定库' : '概要库'}`);
   };
 
   return (
@@ -263,14 +291,6 @@ export function ExtractPage() {
           >
             <Download className="h-4 w-4" />
             导出
-          </button>
-          <button
-            onClick={handleSaveToLibrary}
-            disabled={results.length === 0}
-            className="flex h-9 items-center gap-1.5 rounded-lg border border-brand/30 bg-brand-light px-4 text-sm font-medium text-brand transition-colors hover:bg-brand/10 disabled:cursor-not-allowed disabled:border-gray-200 disabled:bg-white disabled:text-gray-300"
-          >
-            <Library className="h-4 w-4" />
-            保存到剧情库
           </button>
         </div>
       </header>
@@ -345,7 +365,30 @@ export function ExtractPage() {
           <section className="min-h-[220px] overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
               <h2 className="text-sm font-bold text-gray-900">提炼结果</h2>
-              <span className="text-xs text-gray-400">{saveMessage || extractProgress || `${results.length} 条`}</span>
+              <div className="flex items-center gap-2 text-xs text-gray-400">
+                <span>{saveMessage || extractProgress || `${results.length} 条`}</span>
+                <button
+                  onClick={handleSaveToPlotLibrary}
+                  disabled={results.length === 0}
+                  className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50 disabled:text-gray-300"
+                >
+                  入剧情库
+                </button>
+                <button
+                  onClick={() => handleWriteBack('setting')}
+                  disabled={results.length === 0}
+                  className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50 disabled:text-gray-300"
+                >
+                  入设定库
+                </button>
+                <button
+                  onClick={() => handleWriteBack('outline')}
+                  disabled={results.length === 0}
+                  className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50 disabled:text-gray-300"
+                >
+                  入概要库
+                </button>
+              </div>
             </div>
             <div className="max-h-[280px] overflow-y-auto p-4">
               {results.length === 0 ? (
@@ -356,7 +399,45 @@ export function ExtractPage() {
                 <div className="space-y-3">
                   {results.map((result) => (
                     <article key={result.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                      <h3 className="mb-2 text-xs font-bold text-gray-800">{result.chapterTitle}</h3>
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <h3 className="text-xs font-bold text-gray-800">{result.chapterTitle}</h3>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => savePlotItems([{
+                              title: result.chapterTitle,
+                              chapter: result.chapterTitle,
+                              novelTitle: selectedNovel?.title ?? '',
+                              content: result.content,
+                              tags: activeOutputModules.map((module) => module.label),
+                            }])}
+                            className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-white"
+                          >
+                            进剧情库
+                          </button>
+                          <button
+                            onClick={() => addWorkbenchLibraryEntry(
+                              `xinyuexia_workbench_settings_${selectedNovel?.id ?? 0}`,
+                              '设定',
+                              `提炼设定-${result.chapterTitle}`,
+                              result.content,
+                            )}
+                            className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-white"
+                          >
+                            进设定
+                          </button>
+                          <button
+                            onClick={() => addWorkbenchLibraryEntry(
+                              `xinyuexia_workbench_outline_${selectedNovel?.id ?? 0}`,
+                              '章节概要',
+                              `提炼概要-${result.chapterTitle}`,
+                              result.content,
+                            )}
+                            className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-white"
+                          >
+                            进概要
+                          </button>
+                        </div>
+                      </div>
                       <pre className="whitespace-pre-wrap text-xs leading-6 text-gray-600">{result.content}</pre>
                     </article>
                   ))}
