@@ -9,9 +9,10 @@ import {
 } from 'lucide-react';
 import {
   DndContext,
-  closestCenter,
+  closestCorners,
   KeyboardSensor,
   PointerSensor,
+  useDroppable,
   useSensor,
   useSensors,
   type DragEndEvent,
@@ -24,6 +25,9 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+
+const SYSTEM_ZONE_ID = 'extract-system-zone';
+const OUTPUT_ZONE_ID = 'extract-output-zone';
 
 // ─── CSS 动画关键帧 ───
 const FADE_IN_CSS = `
@@ -471,6 +475,39 @@ function SortableModuleItem({
   );
 }
 
+function ModuleDropZone({
+  id,
+  children,
+  isEmpty,
+  emptyText,
+}: {
+  id: string;
+  children: React.ReactNode;
+  isEmpty: boolean;
+  emptyText: string;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`min-h-[56px] rounded-lg transition-all ${
+        isOver ? 'bg-brand-light/40 ring-2 ring-brand/25' : ''
+      }`}
+    >
+      {isEmpty ? (
+        <div className={`mx-2 my-1 flex min-h-[56px] items-center justify-center rounded-lg border border-dashed text-[11px] transition-all ${
+          isOver ? 'border-brand text-brand bg-brand-light/30' : 'border-gray-200 text-gray-400'
+        }`}>
+          {emptyText}
+        </div>
+      ) : (
+        children
+      )}
+    </div>
+  );
+}
+
 // ─── 模块预览（带折叠功能） ───
 function PreviewPanel({
   systemKeys, outputKeys, allModules,
@@ -814,10 +851,45 @@ export default function ExtractPage() {
   // ─── @dnd-kit 拖拽传感器（长按 150ms 触发，专门手柄区域） ───
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { delay: 150, tolerance: 5 },
+      activationConstraint: { distance: 4 },
     }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
+
+  const handleModuleDragEnd = useCallback((e: DragEndEvent) => {
+    const { active, over } = e;
+    if (!over) return;
+
+    const activeId = String(active.id);
+    const overId = String(over.id);
+    if (activeId === overId) return;
+
+    const activeMod = allModules[activeId];
+    if (!activeMod) return;
+
+    const sourceOutput = !!activeMod.output;
+    const targetOutput =
+      overId === SYSTEM_ZONE_ID ? false :
+      overId === OUTPUT_ZONE_ID ? true :
+      systemKeys.includes(overId) ? false :
+      outputKeys.includes(overId) ? true :
+      sourceOutput;
+
+    if (sourceOutput === targetOutput) {
+      if (targetOutput) {
+        if (overId !== OUTPUT_ZONE_ID) reorderOutput(activeId, overId);
+      } else if (overId !== SYSTEM_ZONE_ID) {
+        reorderSystem(activeId, overId);
+      }
+      return;
+    }
+
+    moveToZone(
+      activeId,
+      targetOutput,
+      overId === SYSTEM_ZONE_ID || overId === OUTPUT_ZONE_ID ? null : overId,
+    );
+  }, [allModules, systemKeys, outputKeys, reorderOutput, reorderSystem, moveToZone]);
 
   const activeSystemKeys = systemKeys.filter(k => activeKeys.includes(k));
   const activeOutputKeys = outputKeys.filter(k => activeKeys.includes(k));
@@ -1265,63 +1337,61 @@ export default function ExtractPage() {
           <div className="shrink-0 mt-2 mb-1 px-3 py-1.5 rounded-md" style={{ backgroundColor: '#FFF7ED', marginLeft: '8px', marginRight: '8px' }}>
             <span className="text-sm font-bold" style={{ color: '#92400E' }}>系统指令</span>
           </div>
-          <div className="shrink-0 max-h-[35%] overflow-y-auto">
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={(e: DragEndEvent) => {
-                const { active, over } = e;
-                if (!over || active.id === over.id) return;
-                reorderSystem(String(active.id), String(over.id));
-              }}
-            >
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCorners}
+            onDragEnd={handleModuleDragEnd}
+          >
+            <div className="shrink-0 max-h-[35%] overflow-y-auto px-2">
               <SortableContext items={systemKeys} strategy={verticalListSortingStrategy}>
-                {systemKeys.map(id => {
-                  const mod = allModules[id]; if (!mod) return null;
-                  const Icon = MODULE_ICONS[id] || Layers;
-                  return (
-                    <SortableModuleItem
-                      key={id} id={id} mod={mod}
-                      isActive={activeKeys.includes(id)} isSelected={isEditMode && editingId === id} isLocked={lockedModules.has(id)} Icon={Icon}
-                      onToggleActive={toggleActive} onSelect={isEditMode ? selectModule : (mid: string) => { setIsEditMode(true); selectModule(mid); }} onToggleLock={toggleLock}
-                      allMods={allModules}
-                    />
-                  );
-                })}
+                <ModuleDropZone
+                  id={SYSTEM_ZONE_ID}
+                  isEmpty={systemKeys.length === 0}
+                  emptyText={'\u62d6\u5230\u8fd9\u91cc\uff0c\u79fb\u5165\u7cfb\u7edf\u6307\u4ee4'}
+                >
+                  {systemKeys.map(id => {
+                    const mod = allModules[id]; if (!mod) return null;
+                    const Icon = MODULE_ICONS[id] || Layers;
+                    return (
+                      <SortableModuleItem
+                        key={id} id={id} mod={mod}
+                        isActive={activeKeys.includes(id)} isSelected={isEditMode && editingId === id} isLocked={lockedModules.has(id)} Icon={Icon}
+                        onToggleActive={toggleActive} onSelect={isEditMode ? selectModule : (mid: string) => { setIsEditMode(true); selectModule(mid); }} onToggleLock={toggleLock}
+                        allMods={allModules}
+                      />
+                    );
+                  })}
+                </ModuleDropZone>
               </SortableContext>
-            </DndContext>
-          </div>
+            </div>
 
-          {/* ─── 输出模块区（可拖拽排序） ─── */}
-          <div className="shrink-0 mt-1 mb-1 px-3 py-1.5 rounded-md" style={{ backgroundColor: '#E6F7FB', marginLeft: '8px', marginRight: '8px' }}>
-            <span className="text-sm font-bold" style={{ color: '#0E7490' }}>输出模块</span>
-          </div>
-          <div className="flex-1 overflow-y-auto">
-            <DndContext
-              sensors={sensors}
-              collisionDetection={closestCenter}
-              onDragEnd={(e: DragEndEvent) => {
-                const { active, over } = e;
-                if (!over || active.id === over.id) return;
-                reorderOutput(String(active.id), String(over.id));
-              }}
-            >
+            {/* ─── 输出模块区（可拖拽排序） ─── */}
+            <div className="shrink-0 mt-1 mb-1 px-3 py-1.5 rounded-md" style={{ backgroundColor: '#E6F7FB', marginLeft: '8px', marginRight: '8px' }}>
+              <span className="text-sm font-bold" style={{ color: '#0E7490' }}>{'\u8f93\u51fa\u6a21\u5757'}</span>
+            </div>
+            <div className="flex-1 overflow-y-auto px-2">
               <SortableContext items={outputKeys} strategy={verticalListSortingStrategy}>
-                {outputKeys.map(id => {
-                  const mod = allModules[id]; if (!mod) return null;
-                  const Icon = MODULE_ICONS[id] || Layers;
-                  return (
-                    <SortableModuleItem
-                      key={id} id={id} mod={mod}
-                      isActive={activeKeys.includes(id)} isSelected={isEditMode && editingId === id} isLocked={lockedModules.has(id)} Icon={Icon}
-                      onToggleActive={toggleActive} onSelect={isEditMode ? selectModule : (mid: string) => { setIsEditMode(true); selectModule(mid); }} onToggleLock={toggleLock}
-                      allMods={allModules}
-                    />
-                  );
-                })}
+                <ModuleDropZone
+                  id={OUTPUT_ZONE_ID}
+                  isEmpty={outputKeys.length === 0}
+                  emptyText={'\u62d6\u5230\u8fd9\u91cc\uff0c\u79fb\u5165\u8f93\u51fa\u6a21\u5757'}
+                >
+                  {outputKeys.map(id => {
+                    const mod = allModules[id]; if (!mod) return null;
+                    const Icon = MODULE_ICONS[id] || Layers;
+                    return (
+                      <SortableModuleItem
+                        key={id} id={id} mod={mod}
+                        isActive={activeKeys.includes(id)} isSelected={isEditMode && editingId === id} isLocked={lockedModules.has(id)} Icon={Icon}
+                        onToggleActive={toggleActive} onSelect={isEditMode ? selectModule : (mid: string) => { setIsEditMode(true); selectModule(mid); }} onToggleLock={toggleLock}
+                        allMods={allModules}
+                      />
+                    );
+                  })}
+                </ModuleDropZone>
               </SortableContext>
-            </DndContext>
-          </div>
+            </div>
+          </DndContext>
           <div className="shrink-0 px-2.5 py-2 border-t border-gray-100">
             <button onClick={() => { setIsEditMode(true); startCreate(); }}
               className="w-full flex items-center justify-center gap-1 px-2 py-1.5 text-[11px] text-brand bg-brand-light rounded hover:bg-brand-light/80 transition-colors">

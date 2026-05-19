@@ -3,7 +3,7 @@
 Option Explicit
 
 Dim WshShell, FSO
-Dim ProjPath, Port, Url
+Dim ProjPath, Port, Url, NodeModulesPath
 Dim Cmd
 
 Set WshShell = CreateObject("WScript.Shell")
@@ -12,6 +12,7 @@ Set FSO = CreateObject("Scripting.FileSystemObject")
 ProjPath = FSO.GetParentFolderName(WScript.ScriptFullName)
 Port     = 17328
 Url      = "http://localhost:" & Port
+NodeModulesPath = ProjPath & "\node_modules"
 
 If Not FSO.FolderExists(ProjPath) Then
     MsgBox "Project folder not found:" & vbCrLf & ProjPath, vbCritical, "Error"
@@ -20,6 +21,14 @@ End If
 
 If Not FSO.FileExists(ProjPath & "\package.json") Then
     MsgBox "package.json not found:" & vbCrLf & ProjPath, vbCritical, "Error"
+    WScript.Quit 1
+End If
+
+If Not FSO.FolderExists(NodeModulesPath) Then
+    MsgBox "Project dependencies are missing." & vbCrLf & vbCrLf & _
+           "Please run the following in the project folder first:" & vbCrLf & _
+           "cmd /c npm install" & vbCrLf & vbCrLf & _
+           "Project path:" & vbCrLf & ProjPath, vbCritical, "Error"
     WScript.Quit 1
 End If
 

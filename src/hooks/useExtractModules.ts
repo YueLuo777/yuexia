@@ -379,7 +379,10 @@ export function useExtractModules() {
   }, [saveOutputOrder]);
 
   // ─── 跨区移动（系统指令 ↔ 输出模块） ───
-  const moveToZone = useCallback((id: string, targetOutput: boolean) => {
+  const moveToZone = useCallback((id: string, targetOutput: boolean, targetId?: string | null) => {
+    const targetOrder = targetOutput ? outputOrder : systemOrder;
+    const insertAt = targetId ? targetOrder.indexOf(targetId) : -1;
+
     setSystemOrder(prev => { const next = prev.filter(k => k !== id); saveSystemOrder(next); return next; });
     setOutputOrder(prev => { const next = prev.filter(k => k !== id); saveOutputOrder(next); return next; });
     setAllModules(prev => {
@@ -389,11 +392,25 @@ export function useExtractModules() {
       return next;
     });
     if (targetOutput) {
-      setOutputOrder(prev => { const next = [...prev, id]; saveOutputOrder(next); return next; });
+      setOutputOrder(prev => {
+        const cleaned = prev.filter(k => k !== id);
+        const next = [...cleaned];
+        if (insertAt >= 0 && insertAt <= next.length) next.splice(insertAt, 0, id);
+        else next.push(id);
+        saveOutputOrder(next);
+        return next;
+      });
     } else {
-      setSystemOrder(prev => { const next = [...prev, id]; saveSystemOrder(next); return next; });
+      setSystemOrder(prev => {
+        const cleaned = prev.filter(k => k !== id);
+        const next = [...cleaned];
+        if (insertAt >= 0 && insertAt <= next.length) next.splice(insertAt, 0, id);
+        else next.push(id);
+        saveSystemOrder(next);
+        return next;
+      });
     }
-  }, [saveModules, saveSystemOrder, saveOutputOrder]);
+  }, [outputOrder, systemOrder, saveModules, saveSystemOrder, saveOutputOrder]);
 
   // ─── 上移/下移（替代拖拽排序） ───
   const moveUp = useCallback((id: string) => {
