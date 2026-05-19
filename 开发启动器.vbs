@@ -3,16 +3,17 @@
 Option Explicit
 
 Dim WshShell, FSO
-Dim ProjPath, Port, Url, NodeModulesPath
+Dim ProjPath, Port, Url, NodeModulesPath, VbsLogPath
 Dim Cmd
 
 Set WshShell = CreateObject("WScript.Shell")
 Set FSO = CreateObject("Scripting.FileSystemObject")
 
 ProjPath = FSO.GetParentFolderName(WScript.ScriptFullName)
-Port     = 17328
-Url      = "http://localhost:" & Port
+Port = 17328
+Url = "http://127.0.0.1:" & Port & "/#/dashboard"
 NodeModulesPath = ProjPath & "\node_modules"
+VbsLogPath = ProjPath & "\launcher\vbs-launcher.log"
 
 If Not FSO.FolderExists(ProjPath) Then
     MsgBox "Project folder not found:" & vbCrLf & ProjPath, vbCritical, "Error"
@@ -42,22 +43,26 @@ End If
 On Error GoTo 0
 
 If IsPortReady(Port) Then
+    AppendLog VbsLogPath, "Port ready, opening browser: " & Url
     OpenUrl Url
     WScript.Quit 0
 End If
 
-Cmd = "node """ & ProjPath & "\launcher\dev-launcher.cjs"""
+Cmd = "powershell -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File """ & ProjPath & "\launcher\dev-launcher.ps1"""
+AppendLog VbsLogPath, "Launching hidden PowerShell: " & Cmd
 WshShell.Run Cmd, 0, False
 
 WScript.Quit 0
 
 Function IsPortReady(P)
     On Error Resume Next
-    Dim Exec, Output
-    Set Exec = WshShell.Exec("cmd /c netstat -ano | findstr :" & P & " ")
-    Output = Exec.StdOut.ReadAll()
-    IsPortReady = (Output <> "")
-    Set Exec = Nothing
+    Dim Http
+    Set Http = CreateObject("MSXML2.ServerXMLHTTP.6.0")
+    Http.setTimeouts 500, 500, 500, 500
+    Http.Open "GET", "http://127.0.0.1:" & P & "/health", False
+    Http.Send
+    IsPortReady = (Err.Number = 0 And Http.Status >= 200 And Http.Status < 400)
+    Set Http = Nothing
     On Error GoTo 0
 End Function
 
@@ -67,5 +72,15 @@ Sub OpenUrl(U)
     If Err.Number <> 0 Then
         WshShell.Run "cmd /c start """ & U & """", 1, False
     End If
+    On Error GoTo 0
+End Sub
+
+Sub AppendLog(LogPath, Msg)
+    On Error Resume Next
+    Dim File
+    Set File = FSO.OpenTextFile(LogPath, 8, True)
+    File.WriteLine Now & " | " & Msg
+    File.Close
+    Set File = Nothing
     On Error GoTo 0
 End Sub

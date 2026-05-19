@@ -1,6 +1,6 @@
 // Novel Workbench - Dev mode launcher (silent background Vite + browser open)
 
-const { spawn, exec } = require('child_process');
+const { spawn, exec, execFile } = require('child_process');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -61,19 +61,42 @@ function openBrowser() {
   });
 }
 
+function escapePsSingleQuoted(value) {
+  return value.replace(/'/g, "''");
+}
+
 function spawnViteDetached() {
-  const out = fs.openSync(LOG_PATH, 'a');
-  const err = fs.openSync(LOG_PATH, 'a');
-  const child = spawn(process.execPath, [VITE_ENTRY], {
-    cwd: PROJECT_ROOT,
-    detached: true,
-    shell: false,
-    stdio: ['ignore', out, err],
-    windowsHide: true,
+  return new Promise((resolve, reject) => {
+    const nodePath = escapePsSingleQuoted(process.execPath);
+    const vitePath = escapePsSingleQuoted(VITE_ENTRY);
+    const cwdPath = escapePsSingleQuoted(PROJECT_ROOT);
+    const logPath = escapePsSingleQuoted(LOG_PATH);
+    const pidPath = escapePsSingleQuoted(PID_PATH);
+    const psScript = [
+      `$p = Start-Process -FilePath '${nodePath}' -ArgumentList '${vitePath}' -WorkingDirectory '${cwdPath}' -WindowStyle Hidden -RedirectStandardOutput '${logPath}' -RedirectStandardError '${logPath}' -PassThru`,
+      `Set-Content -Path '${pidPath}' -Value $p.Id`,
+      'Write-Output $p.Id',
+    ].join('; ');
+
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-Command', psScript],
+      { windowsHide: true },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(new Error(stderr || error.message));
+          return;
+        }
+        const pid = parseInt(String(stdout).trim(), 10);
+        if (!pid) {
+          reject(new Error(`invalid vite pid: ${stdout}`));
+          return;
+        }
+        log(`[Launcher] Spawned Vite pid=${pid}`);
+        resolve(pid);
+      },
+    );
   });
-  child.unref();
-  fs.writeFileSync(PID_PATH, String(child.pid));
-  log(`[Launcher] Spawned Vite pid=${child.pid}`);
 }
 
 async function main() {
@@ -86,7 +109,7 @@ async function main() {
   }
 
   log('[Launcher] Starting Vite dev server in background...');
-  spawnViteDetached();
+  await spawnViteDetached();
 
   const ready = await waitForServer();
   if (!ready) {
