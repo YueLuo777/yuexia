@@ -9,7 +9,12 @@ function readModels() {
     const raw = localStorage.getItem(MODELS_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw) as { models?: ModelItem[] };
-    return parsed.models ?? [];
+    const models = parsed.models ?? [];
+    const cleaned = models.filter((model) => !['deepseek-v4-flash', 'deepseek-v4-pro'].includes(model.id));
+    if (cleaned.length !== models.length) {
+      writeModels(cleaned);
+    }
+    return cleaned;
   } catch {
     return [];
   }

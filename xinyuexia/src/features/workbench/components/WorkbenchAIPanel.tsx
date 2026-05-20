@@ -93,10 +93,7 @@ export function WorkbenchAIPanel({
     } catch (error) {
       setMessages((prev) => [
         ...prev,
-        {
-          role: 'agent',
-          content: error instanceof Error ? `【错误】${error.message}` : '【错误】模型请求失败。',
-        },
+        { role: 'agent', content: error instanceof Error ? `【错误】${error.message}` : '【错误】模型请求失败。' },
       ]);
     } finally {
       setIsLoading(false);
@@ -117,9 +114,7 @@ export function WorkbenchAIPanel({
   };
 
   const canApplyMessage = (message: ChatMessage) => (
-    message.role === 'agent'
-    && !message.content.startsWith('【错误】')
-    && !message.content.includes('尚未配置可用模型')
+    message.role === 'agent' && !message.content.startsWith('【错误】') && !message.content.includes('尚未配置可用模型')
   );
 
   return (
@@ -188,13 +183,7 @@ export function WorkbenchAIPanel({
           <div className="space-y-3">
             {messages.map((message, index) => (
               <div key={`${message.role}-${index}`} className={message.role === 'user' ? 'ml-8' : 'mr-8'}>
-                <div
-                  className={`whitespace-pre-wrap rounded-xl px-3 py-2 text-xs leading-6 ${
-                    message.role === 'user'
-                      ? 'bg-brand text-white'
-                      : 'border border-gray-100 bg-gray-50 text-gray-600'
-                  }`}
-                >
+                <div className={`whitespace-pre-wrap rounded-xl px-3 py-2 text-xs leading-6 ${message.role === 'user' ? 'bg-brand text-white' : 'border border-gray-100 bg-gray-50 text-gray-600'}`}>
                   {message.content}
                 </div>
                 {canApplyMessage(message) && (
@@ -231,9 +220,7 @@ export function WorkbenchAIPanel({
           className="h-24 w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm leading-6 outline-none focus:border-brand"
         />
         <div className="mt-2 flex justify-end">
-          {actionMessage && (
-            <span className="mr-auto self-center text-[11px] text-brand">{actionMessage}</span>
-          )}
+          {actionMessage && <span className="mr-auto self-center text-[11px] text-brand">{actionMessage}</span>}
           <button
             onClick={() => void sendMessage()}
             disabled={isLoading || !input.trim()}

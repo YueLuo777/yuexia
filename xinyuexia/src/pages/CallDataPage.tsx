@@ -2,6 +2,7 @@ import { Activity, ArrowUpDown, BarChart3, CheckCircle, ChevronDown, ChevronUp, 
 import { useMemo, useState } from 'react';
 
 import { getStatsByModel, type CallRecord, useCallRecords } from '@/hooks/useCallRecords';
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 
 function formatTime(ts: number) {
   const date = new Date(ts);
@@ -29,6 +30,7 @@ export default function CallDataPage() {
   const [sortField, setSortField] = useState<SortField>('timestamp');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [expandedStats, setExpandedStats] = useState(true);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const modelOptions = useMemo(() => {
     const map = new Map<string, string>();
@@ -87,9 +89,7 @@ export default function CallDataPage() {
           </button>
           {records.length > 0 && (
             <button
-              onClick={() => {
-                if (window.confirm('确定清空所有调用记录吗？')) clear();
-              }}
+              onClick={() => setShowClearConfirm(true)}
               className="flex items-center gap-1.5 rounded-md border border-red-200 px-3 py-1.5 text-xs text-red-600 hover:bg-red-50"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -258,6 +258,19 @@ export default function CallDataPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        isOpen={showClearConfirm}
+        title="确认清空"
+        description="确定要清空所有调用记录吗？清空后无法恢复。"
+        confirmText="确认清空"
+        confirmVariant="danger"
+        onClose={() => setShowClearConfirm(false)}
+        onConfirm={() => {
+          clear();
+          setShowClearConfirm(false);
+        }}
+      />
     </div>
   );
 }

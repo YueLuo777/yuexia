@@ -30,7 +30,7 @@ export function ChapterSidebar({
   const chapterCount = volumes.reduce((sum, volume) => sum + volume.chapters.length, 0);
 
   return (
-    <aside className="flex w-[200px] shrink-0 flex-col border-r border-gray-300 bg-white">
+    <aside className="flex w-[240px] shrink-0 flex-col border-r border-gray-300 bg-white">
       <div className="flex h-[42px] shrink-0 items-center justify-between border-b border-gray-100 px-3 py-2.5">
         <div className="flex items-center gap-2">
           <h2 className="whitespace-nowrap text-sm font-bold text-gray-900">未发布</h2>
@@ -79,9 +79,7 @@ export function ChapterSidebar({
                     <div
                       key={chapter.id}
                       className={`group flex items-center rounded-md border-l-[3px] transition-colors ${
-                        chapter.isSelected
-                          ? 'border-orange-400 bg-orange-50'
-                          : 'border-transparent hover:bg-gray-50'
+                        chapter.isSelected ? 'border-orange-400 bg-orange-50' : 'border-transparent hover:bg-gray-50'
                       }`}
                     >
                       <button

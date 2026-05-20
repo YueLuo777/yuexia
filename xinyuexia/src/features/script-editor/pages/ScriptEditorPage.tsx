@@ -20,6 +20,7 @@ import { WorkbenchAIPanel } from '@/features/workbench/components/WorkbenchAIPan
 import { readChapterContent, useWorkbenchData } from '@/features/workbench/hooks/useWorkbenchData';
 import { addWorkbenchLibraryEntry } from '@/features/workbench/model/workbenchLibraryStorage';
 import type { Chapter, Volume, WorkbenchNovel } from '@/features/workbench/model/workbenchTypes';
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 
 type EditorMode = 'dual' | 'script' | 'browser';
 type AIResultAction = 'replace' | 'append' | 'setting' | 'outline' | 'plot';
@@ -780,6 +781,7 @@ export function ScriptEditorPage() {
   const [selectedNovelChapterId, setSelectedNovelChapterId] = useState<number | null>(null);
   const [selectedMaterialId, setSelectedMaterialId] = useState<string | null>(null);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [deleteChapterTarget, setDeleteChapterTarget] = useState<{ volumeId: number; chapterId: number; title: string } | null>(null);
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => readStoredJson(WIDTH_STORAGE_KEYS[editorMode], {}));
 
   const dragRef = useRef<{
@@ -1087,8 +1089,11 @@ export function ScriptEditorPage() {
           }}
           onDeleteChapter={() => {
             if (!selectedChapter) return;
-            if (!window.confirm('确定要删除当前章节吗？')) return;
-            deleteChapter(selectedChapter.volumeId, selectedChapter.chapter.id);
+            setDeleteChapterTarget({
+              volumeId: selectedChapter.volumeId,
+              chapterId: selectedChapter.chapter.id,
+              title: selectedChapter.chapter.title || `第${selectedChapter.chapter.serialNumber}章`,
+            });
           }}
         />
 
@@ -1151,6 +1156,21 @@ export function ScriptEditorPage() {
         onLink={(novelId) => {
           setLinkedNovelId(novelId);
           setIsLinkModalOpen(false);
+        }}
+      />
+
+      <ConfirmDialog
+        isOpen={!!deleteChapterTarget}
+        title="确认删除"
+        description={`确定要删除章节“${deleteChapterTarget?.title ?? ''}”吗？删除后会进入回收站。`}
+        confirmText="移入回收站"
+        confirmVariant="warning"
+        onClose={() => setDeleteChapterTarget(null)}
+        onConfirm={() => {
+          if (deleteChapterTarget) {
+            deleteChapter(deleteChapterTarget.volumeId, deleteChapterTarget.chapterId);
+          }
+          setDeleteChapterTarget(null);
         }}
       />
     </div>

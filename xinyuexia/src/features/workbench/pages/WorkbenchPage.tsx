@@ -20,12 +20,12 @@ export function WorkbenchPage() {
   const [activeModal, setActiveModal] = useState<ModalKey | null>(null);
   const [notes, setNotes] = useState(() => localStorage.getItem('xinyuexia_workbench_notes') ?? '');
   const [aiPanelWidth, setAiPanelWidth] = useState(() => {
-    const saved = Number.parseInt(localStorage.getItem('xinyuexia_ai_panel_width') ?? '290', 10);
-    return Number.isFinite(saved) ? saved : 290;
+    const saved = Number.parseInt(localStorage.getItem('xinyuexia_ai_panel_width') ?? '350', 10);
+    return Number.isFinite(saved) ? saved : 350;
   });
   const [isDraggingPanel, setIsDraggingPanel] = useState(false);
   const dragStartX = useRef(0);
-  const dragStartWidth = useRef(290);
+  const dragStartWidth = useRef(350);
 
   const {
     currentNovel,
@@ -61,7 +61,7 @@ export function WorkbenchPage() {
 
     const handleMove = (event: MouseEvent) => {
       const deltaX = dragStartX.current - event.clientX;
-      setAiPanelWidth(Math.max(220, Math.min(600, dragStartWidth.current + deltaX)));
+      setAiPanelWidth(Math.max(260, Math.min(520, dragStartWidth.current + deltaX)));
     };
 
     const handleUp = () => {
@@ -119,21 +119,11 @@ export function WorkbenchPage() {
       return;
     }
     if (action === 'setting') {
-      addWorkbenchLibraryEntry(
-        `xinyuexia_workbench_settings_${currentNovel.id}`,
-        '设定',
-        `AI设定-${aiResultTitle}`,
-        content,
-      );
+      addWorkbenchLibraryEntry(`xinyuexia_workbench_settings_${currentNovel.id}`, '设定', `AI设定-${aiResultTitle}`, content);
       return;
     }
     if (action === 'outline') {
-      addWorkbenchLibraryEntry(
-        `xinyuexia_workbench_outline_${currentNovel.id}`,
-        '章节概要',
-        `AI概要-${aiResultTitle}`,
-        content,
-      );
+      addWorkbenchLibraryEntry(`xinyuexia_workbench_outline_${currentNovel.id}`, '章节概要', `AI概要-${aiResultTitle}`, content);
       return;
     }
     savePlotItems([{
@@ -214,98 +204,47 @@ export function WorkbenchPage() {
             <section className="rounded-lg border border-gray-200 p-4">
               <h3 className="mb-3 text-base font-bold text-gray-900">作品概览</h3>
               <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs text-gray-400">作品名</p>
-                  <p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.title}</p>
-                </div>
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs text-gray-400">类型</p>
-                  <p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.type === 'script' ? '剧本' : '小说'}</p>
-                </div>
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs text-gray-400">分类</p>
-                  <p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.category ?? '未分类'}</p>
-                </div>
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs text-gray-400">卷数</p>
-                  <p className="mt-1 text-sm font-bold text-gray-900">{volumes.length}</p>
-                </div>
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs text-gray-400">章节数</p>
-                  <p className="mt-1 text-sm font-bold text-gray-900">{chapterCount}</p>
-                </div>
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs text-gray-400">总字数</p>
-                  <p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.wordCount ?? 0}</p>
-                </div>
+                <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-400">作品名</p><p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.title}</p></div>
+                <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-400">类型</p><p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.type === 'script' ? '剧本' : '小说'}</p></div>
+                <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-400">分类</p><p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.category ?? '未分类'}</p></div>
+                <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-400">卷数</p><p className="mt-1 text-sm font-bold text-gray-900">{volumes.length}</p></div>
+                <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-400">章节数</p><p className="mt-1 text-sm font-bold text-gray-900">{chapterCount}</p></div>
+                <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-400">总字数</p><p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.wordCount ?? 0}</p></div>
               </div>
             </section>
-
             <section className="rounded-lg border border-gray-200 p-4">
               <h3 className="mb-3 text-base font-bold text-gray-900">时间与位置</h3>
               <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs text-gray-400">创建时间</p>
-                  <p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.createdAt ?? '-'}</p>
-                </div>
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs text-gray-400">最近修改</p>
-                  <p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.lastModifiedAt ?? '-'}</p>
-                </div>
-                <div className="rounded-lg bg-gray-50 p-3">
-                  <p className="text-xs text-gray-400">当前卷 / 章</p>
-                  <p className="mt-1 text-sm font-bold text-gray-900">{selectedVolumeName} / {selectedChapterTitle ?? '未选择章节'}</p>
-                </div>
+                <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-400">创建时间</p><p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.createdAt ?? '-'}</p></div>
+                <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-400">最近修改</p><p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.lastModifiedAt ?? '-'}</p></div>
+                <div className="rounded-lg bg-gray-50 p-3"><p className="text-xs text-gray-400">当前卷 / 章</p><p className="mt-1 text-sm font-bold text-gray-900">{selectedVolumeName} / {selectedChapterTitle ?? '未选择章节'}</p></div>
               </div>
-            </section>
-
-            <section className="rounded-lg border border-gray-200 p-4">
-              <h3 className="mb-2 text-base font-bold text-gray-900">作品简介</h3>
-              <p className="whitespace-pre-wrap rounded-md bg-gray-50 px-3 py-2 text-sm leading-6 text-gray-700">
-                {currentNovel.synopsis?.trim() || '暂无简介'}
-              </p>
             </section>
           </div>
         </div>
       </WorkbenchModal>
 
       <WorkbenchModal title="提炼剧情" isOpen={activeModal === 'extract'} onClose={() => setActiveModal(null)} widthClass="w-[820px]">
-        <div className="flex flex-1 flex-col bg-white p-5">
-          <div className="rounded-lg border border-brand/20 bg-brand-light/50 p-4">
-            <h3 className="text-sm font-bold text-gray-900">当前章节提炼入口</h3>
-            <p className="mt-2 text-sm leading-6 text-gray-500">
-              这里仅显示入口提示，完整提炼流程已迁移到独立的“提炼剧情”页面。
-            </p>
-          </div>
-          <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-4 text-sm text-gray-500">
-            当前章节：{selectedChapterTitle ?? '未选择章节'}
-          </div>
+        <div className="flex h-full items-center justify-center bg-white p-8 text-center text-sm text-gray-500">
+          这里保留旧项目入口，完整提炼流程已迁移到独立的“提炼剧情”页面。
         </div>
       </WorkbenchModal>
 
-      <WorkbenchModal title="设定库" isOpen={activeModal === 'settings'} onClose={() => setActiveModal(null)}>
-        <WorkbenchLibraryPanel
-          storageKey={`xinyuexia_workbench_settings_${currentNovel.id}`}
-          tabs={['角色', '设定', '伏笔']}
-          emptyText="暂无设定内容"
-        />
+      <WorkbenchModal title="设定库" isOpen={activeModal === 'settings'} onClose={() => setActiveModal(null)} widthClass="w-[1080px]">
+        <WorkbenchLibraryPanel storageKey={`xinyuexia_workbench_settings_${currentNovel.id}`} tabs={['设定', '角色', '伏笔']} emptyText="暂无设定内容" />
       </WorkbenchModal>
 
-      <WorkbenchModal title="概要库" isOpen={activeModal === 'outline'} onClose={() => setActiveModal(null)}>
-        <WorkbenchLibraryPanel
-          storageKey={`xinyuexia_workbench_outline_${currentNovel.id}`}
-          tabs={['章节概要', '卷概要']}
-          emptyText="暂无概要内容"
-        />
+      <WorkbenchModal title="概要库" isOpen={activeModal === 'outline'} onClose={() => setActiveModal(null)} widthClass="w-[1080px]">
+        <WorkbenchLibraryPanel storageKey={`xinyuexia_workbench_outline_${currentNovel.id}`} tabs={['章节概要', '卷概要']} emptyText="暂无概要内容" />
       </WorkbenchModal>
 
-      <WorkbenchModal title="备忘录" isOpen={activeModal === 'notes'} onClose={() => setActiveModal(null)}>
-        <div className="flex min-h-0 flex-1 flex-col bg-white p-5">
+      <WorkbenchModal title="备忘录" isOpen={activeModal === 'notes'} onClose={() => setActiveModal(null)} widthClass="w-[920px]">
+        <div className="flex h-full flex-col bg-white p-5">
           <textarea
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
-            placeholder="记录临时想法、伏笔、待修改内容..."
-            className="editor-scrollbar flex-1 resize-none rounded-lg border border-gray-200 px-4 py-3 text-sm leading-7 text-gray-700 outline-none focus:border-brand"
+            placeholder="在这里记录灵感、待办和临时备注..."
+            className="editor-scrollbar flex-1 resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm leading-7 text-gray-700 outline-none focus:border-brand"
           />
         </div>
       </WorkbenchModal>

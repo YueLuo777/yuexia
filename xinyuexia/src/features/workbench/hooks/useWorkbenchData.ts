@@ -58,26 +58,25 @@ export function toChineseNumber(value: number) {
 
 function normalizeVolumeNames(volumesMap: Record<number, Volume[]>) {
   let changed = false;
-  const next = Object.fromEntries(Object.entries(volumesMap).map(([novelId, volumes]) => [
-    novelId,
-    volumes.map((volume, index) => {
-      if (volume.name === '集纲') return volume;
-      if (/^第.+卷$/.test(volume.name)) return volume;
-      if (/^第?\d+卷$/.test(volume.name)) {
-        const number = Number(volume.name.replace(/\D/g, ''));
-        changed = true;
-        return { ...volume, name: `第${toChineseNumber(number)}卷` };
-      }
-      if (/^[\u4e00-\u9fff?]+$/.test(volume.name) && volume.name.includes('卷')) {
+  const next = Object.fromEntries(
+    Object.entries(volumesMap).map(([novelId, volumes]) => [
+      novelId,
+      volumes.map((volume, index) => {
+        if (volume.name === '集纲') return volume;
+        if (/^第.+卷$/.test(volume.name)) return volume;
+        if (/^第\d+卷$/.test(volume.name)) {
+          const number = Number(volume.name.replace(/\D/g, ''));
+          changed = true;
+          return { ...volume, name: `第${toChineseNumber(number)}卷` };
+        }
+        if (index === 0 && volume.chapters.some((chapter) => chapter.title.startsWith('集纲'))) {
+          changed = true;
+          return { ...volume, name: '集纲' };
+        }
         return volume;
-      }
-      if (index === 0 && volume.chapters.some((chapter) => chapter.title.startsWith('集纲'))) {
-        changed = true;
-        return { ...volume, name: '集纲' };
-      }
-      return volume;
-    }),
-  ])) as Record<number, Volume[]>;
+      }),
+    ]),
+  ) as Record<number, Volume[]>;
 
   if (changed) writeJson(VOLUMES_KEY, next);
   return next;
@@ -242,30 +241,29 @@ export function useWorkbenchData() {
 
   const updateNovelWordCount = useCallback((nextVolumes: Volume[]) => {
     if (!currentNovelId) return;
-    const wordCount = nextVolumes.reduce((sum, volume) => (
-      sum + volume.chapters.reduce((chapterSum, chapter) => chapterSum + chapter.wordCount, 0)
-    ), 0);
-    const nextNovels = novels.map((novel) => novel.id === currentNovelId
-      ? { ...novel, wordCount, lastModifiedAt: formatDate() }
-      : novel);
+    const wordCount = nextVolumes.reduce(
+      (sum, volume) => sum + volume.chapters.reduce((chapterSum, chapter) => chapterSum + chapter.wordCount, 0),
+      0,
+    );
+    const nextNovels = novels.map((novel) => (novel.id === currentNovelId ? { ...novel, wordCount, lastModifiedAt: formatDate() } : novel));
     setNovels(nextNovels);
     writeJson(NOVELS_KEY, nextNovels);
   }, [currentNovelId, novels]);
 
   const selectChapter = useCallback((volumeId: number, chapterId: number) => {
-    persistVolumes((prev) => prev.map((volume) => ({
-      ...volume,
-      chapters: volume.chapters.map((chapter) => ({
-        ...chapter,
-        isSelected: volume.id === volumeId && chapter.id === chapterId,
+    persistVolumes((prev) =>
+      prev.map((volume) => ({
+        ...volume,
+        chapters: volume.chapters.map((chapter) => ({
+          ...chapter,
+          isSelected: volume.id === volumeId && chapter.id === chapterId,
+        })),
       })),
-    })));
+    );
   }, [persistVolumes]);
 
   const toggleVolume = useCallback((volumeId: number) => {
-    persistVolumes((prev) => prev.map((volume) => volume.id === volumeId
-      ? { ...volume, isExpanded: !volume.isExpanded }
-      : volume));
+    persistVolumes((prev) => prev.map((volume) => (volume.id === volumeId ? { ...volume, isExpanded: !volume.isExpanded } : volume)));
   }, [persistVolumes]);
 
   const toggleSort = useCallback(() => {
@@ -306,9 +304,7 @@ export function useWorkbenchData() {
         title = `集纲${serialNumber}`;
       } else {
         const usedNumbers = new Set(
-          prev
-            .filter((volume) => volume.name !== '集纲')
-            .flatMap((volume) => volume.chapters.map((chapter) => chapter.serialNumber)),
+          prev.filter((volume) => volume.name !== '集纲').flatMap((volume) => volume.chapters.map((chapter) => chapter.serialNumber)),
         );
         while (usedNumbers.has(serialNumber)) serialNumber += 1;
       }
@@ -332,10 +328,12 @@ export function useWorkbenchData() {
   }, [persistVolumes]);
 
   const renameChapter = useCallback((chapterId: number, title: string) => {
-    persistVolumes((prev) => prev.map((volume) => ({
-      ...volume,
-      chapters: volume.chapters.map((chapter) => chapter.id === chapterId ? { ...chapter, title } : chapter),
-    })));
+    persistVolumes((prev) =>
+      prev.map((volume) => ({
+        ...volume,
+        chapters: volume.chapters.map((chapter) => (chapter.id === chapterId ? { ...chapter, title } : chapter)),
+      })),
+    );
   }, [persistVolumes]);
 
   const deleteChapter = useCallback((volumeId: number, chapterId: number) => {
@@ -356,9 +354,7 @@ export function useWorkbenchData() {
         content: readChapterContent(currentNovelId, chapterId),
       };
 
-      return prev.map((item) => item.id === volumeId
-        ? { ...item, chapters: item.chapters.filter((candidate) => candidate.id !== chapterId) }
-        : item);
+      return prev.map((item) => (item.id === volumeId ? { ...item, chapters: item.chapters.filter((candidate) => candidate.id !== chapterId) } : item));
     });
 
     if (deleted) {
@@ -392,8 +388,7 @@ export function useWorkbenchData() {
       return prev.map((volume) => ({
         ...volume,
         chapters: volume.id === targetVolumeId
-          ? [...volume.chapters.map((chapter) => ({ ...chapter, isSelected: false })), restored]
-            .sort((a, b) => a.serialNumber - b.serialNumber)
+          ? [...volume.chapters.map((chapter) => ({ ...chapter, isSelected: false })), restored].sort((a, b) => a.serialNumber - b.serialNumber)
           : volume.chapters.map((chapter) => ({ ...chapter, isSelected: false })),
       }));
     });
@@ -410,9 +405,7 @@ export function useWorkbenchData() {
     const wordCount = countWords(content);
     const nextVolumes = volumes.map((volume) => ({
       ...volume,
-      chapters: volume.chapters.map((chapter) => chapter.id === selectedChapter.chapter.id
-        ? { ...chapter, wordCount }
-        : chapter),
+      chapters: volume.chapters.map((chapter) => (chapter.id === selectedChapter.chapter.id ? { ...chapter, wordCount } : chapter)),
     }));
     const nextMap = { ...volumesMap, [currentNovelId]: nextVolumes };
     setVolumesMap(nextMap);

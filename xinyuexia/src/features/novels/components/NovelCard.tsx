@@ -70,7 +70,7 @@ function getBtnColorClasses(color: NonNullable<NovelCardSettings['btnColors']>[s
   }
 }
 
-export function NovelCard({ novel, isSelected, settings, onOpen, onRename, onCover, onExport, onDelete }: NovelCardProps) {
+export function NovelCard({ novel, settings, onOpen, onRename, onCover, onExport, onDelete }: NovelCardProps) {
   const btnOrder = settings.btnOrder?.length ? settings.btnOrder : ['重命名', '封面', '导出', '删除'];
   const btnPerRow = settings.btnPerRow ?? 2;
   const btnRows = settings.btnRows ?? 2;
@@ -81,6 +81,7 @@ export function NovelCard({ novel, isSelected, settings, onOpen, onRename, onCov
   const statFont = statFontMap[settings.statFontSize ?? 'medium'];
   const btnFont = btnFontMap[settings.buttonFontSize ?? 'medium'];
   const btnWeight = btnWeightMap[settings.buttonFontWeight ?? 'medium'];
+
   const actions: Record<string, (event: React.MouseEvent) => void> = {
     重命名: (event) => {
       event.stopPropagation();
@@ -103,9 +104,7 @@ export function NovelCard({ novel, isSelected, settings, onOpen, onRename, onCov
   return (
     <article
       onClick={() => onOpen(novel.id)}
-      className={`group flex cursor-pointer flex-col rounded-[24px] border border-gray-100 bg-white p-3 transition-shadow hover:shadow-xl ${
-        isSelected ? 'ring-2 ring-orange-100' : ''
-      }`}
+      className="group flex cursor-pointer flex-col rounded-[24px] border border-slate-100 bg-white p-3 transition-shadow hover:shadow-xl"
       style={{ width: widthMap[settings.cardWidth], minHeight: 340 }}
     >
       <div
@@ -128,8 +127,8 @@ export function NovelCard({ novel, isSelected, settings, onOpen, onRename, onCov
       </div>
 
       <div className="flex flex-1 flex-col px-1 pb-1 pt-3">
-        <h3 className="mb-2 truncate text-sm font-bold text-gray-900" title={novel.title}>{novel.title}</h3>
-        <div className={`mb-3 flex items-center justify-between text-gray-400 ${statFont}`}>
+        <h3 className="mb-2 truncate text-sm font-bold text-slate-900" title={novel.title}>{novel.title}</h3>
+        <div className={`mb-3 flex items-center justify-between text-slate-400 ${statFont}`}>
           <span>{novel.wordCount} 字</span>
           <span>{novel.lastModifiedAt || novel.createdAt}</span>
         </div>

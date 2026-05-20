@@ -1,101 +1,242 @@
-import { Bot, Eye, EyeOff, GripVertical, Plus, Server } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { Bot, Eye, EyeOff, GripVertical, Plus, Server, Trash2, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 
 import { useModels } from '@/features/models/hooks/useModels';
+import type { ModelItem } from '@/features/models/model/modelTypes';
+import { callModel } from '@/features/models/services/callModel';
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
+
+type ModelDraft = {
+  name: string;
+  id: string;
+  baseUrl: string;
+  apiKey: string;
+};
+
+function ModelEditorModal({
+  isOpen,
+  title,
+  initial,
+  onClose,
+  onSave,
+}: {
+  isOpen: boolean;
+  title: string;
+  initial: ModelDraft;
+  onClose: () => void;
+  onSave: (draft: ModelDraft) => void;
+}) {
+  const [draft, setDraft] = useState<ModelDraft>(initial);
+  const [showKey, setShowKey] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) setDraft(initial);
+  }, [initial, isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="w-[620px] max-w-[92vw] rounded-[28px] bg-white shadow-[0_24px_60px_rgba(15,23,42,0.18)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-slate-100 px-8 py-6">
+          <h2 className="text-[18px] font-bold text-slate-900">{title}</h2>
+          <button onClick={onClose} className="rounded-lg p-1.5 text-slate-300 transition-colors hover:bg-slate-100 hover:text-slate-500">
+            <X className="h-5 w-5" />
+          </button>
+        </div>
+
+        <div className="space-y-5 px-8 py-7">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-600">模型名称</label>
+            <input
+              value={draft.name}
+              onChange={(event) => setDraft((prev) => ({ ...prev, name: event.target.value }))}
+              placeholder="DeepSeek V4 Flash"
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition-colors focus:border-brand"
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-600">模型 ID</label>
+            <input
+              value={draft.id}
+              onChange={(event) => setDraft((prev) => ({ ...prev, id: event.target.value }))}
+              placeholder="deepseek-v4-flash"
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition-colors focus:border-brand"
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-600">接口地址</label>
+            <input
+              value={draft.baseUrl}
+              onChange={(event) => setDraft((prev) => ({ ...prev, baseUrl: event.target.value }))}
+              placeholder="https://api.deepseek.com"
+              className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none transition-colors focus:border-brand"
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-600">API Key</label>
+            <div className="relative">
+              <input
+                type={showKey ? 'text' : 'password'}
+                value={draft.apiKey}
+                onChange={(event) => setDraft((prev) => ({ ...prev, apiKey: event.target.value }))}
+                className="w-full rounded-2xl border border-slate-200 px-4 py-3 pr-11 text-sm outline-none transition-colors focus:border-brand"
+              />
+              <button
+                onClick={() => setShowKey((prev) => !prev)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 transition-colors hover:text-slate-500"
+              >
+                {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-4 border-t border-slate-100 bg-slate-50/60 px-8 py-5">
+          <button onClick={onClose} className="rounded-2xl border border-slate-200 px-6 py-3 text-base text-slate-600 hover:bg-white">
+            取消
+          </button>
+          <button
+            onClick={() => onSave(draft)}
+            disabled={!draft.name.trim() || !draft.id.trim()}
+            className="rounded-2xl bg-brand px-7 py-3 text-base text-white transition-colors hover:bg-brand-dark disabled:bg-slate-300"
+          >
+            保存修改
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function ModelManagePage() {
   const { models, addModel, updateModel, deleteModel, reorderModels } = useModels();
-  const [showKey, setShowKey] = useState(false);
-  const [isAdding, setIsAdding] = useState(models.length === 0);
-  const [form, setForm] = useState({ name: '', id: '', baseUrl: '', apiKey: '' });
+  const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState<ModelItem | null>(null);
+  const [showAddKey, setShowAddKey] = useState(false);
+  const [form, setForm] = useState<ModelDraft>({ name: '', id: '', baseUrl: '', apiKey: '' });
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ModelItem | null>(null);
+  const [toast, setToast] = useState('');
   const dragIndexRef = useRef<number | null>(null);
 
   const enabledCount = models.filter((model) => model.enabled).length;
 
-  const submitModel = () => {
-    const created = addModel(form);
-    if (!created) return;
+  const showToast = (message: string) => {
+    setToast(message);
+    window.setTimeout(() => setToast(''), 1800);
+  };
+
+  const openAdd = () => {
+    setEditing(null);
+    setShowAdd(true);
     setForm({ name: '', id: '', baseUrl: '', apiKey: '' });
-    setIsAdding(false);
+  };
+
+  const openEdit = (model: ModelItem) => {
+    setEditing(model);
+    setShowAdd(false);
+  };
+
+  const submitAdd = () => {
+    const created = addModel(form);
+    if (!created) {
+      showToast('模型 ID 已存在');
+      return;
+    }
+    setForm({ name: '', id: '', baseUrl: '', apiKey: '' });
+    setShowAdd(false);
+    showToast('模型已添加');
+  };
+
+  const testModel = async (model: ModelItem) => {
+    updateModel(model.id, { connectionStatus: 'testing' });
+    try {
+      await callModel({
+        model,
+        prompt: '你是一个测试助手。',
+        userContent: '请只返回“连接成功”。',
+        chapterContext: '',
+      });
+      updateModel(model.id, { connectionStatus: 'connected' });
+      showToast('连接成功');
+    } catch {
+      updateModel(model.id, { connectionStatus: 'failed' });
+      showToast('连接失败');
+    }
+  };
+
+  const statusText = (model: ModelItem) => {
+    if (!model.enabled) return '未启用';
+    if (model.connectionStatus === 'connected') return '正常';
+    if (model.connectionStatus === 'failed') return '失败';
+    if (model.connectionStatus === 'testing') return '测试中';
+    return '未测试';
   };
 
   return (
-    <div className="flex h-full flex-col bg-gray-50">
-      <div className="border-b border-gray-100 px-5 py-3">
+    <div className="flex h-full flex-col bg-slate-50">
+      <div className="border-b border-slate-100 bg-white px-7 py-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-brand-light">
-            <Server className="h-4 w-4 text-brand" />
+          <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-brand-light text-brand">
+            <Server className="h-5 w-5" />
           </div>
-          <h1 className="text-base font-bold text-gray-900">模型管理</h1>
-          <span className="rounded-md bg-orange-500 px-2 py-0.5 text-xs text-white">已启用 {enabledCount} 个模型</span>
+          <h1 className="text-[18px] font-bold text-slate-900">模型管理</h1>
+          <span className="rounded-xl bg-orange-500 px-3 py-1 text-sm text-white">已启用 {enabledCount} 个模型</span>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-5 py-4">
-        <div className="mb-4 flex items-center gap-3">
-          <button
-            onClick={() => setIsAdding((prev) => !prev)}
-            className="flex items-center gap-1.5 rounded-md bg-brand px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-dark"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            <span>新增模型</span>
+      <div className="flex-1 overflow-y-auto px-7 py-6">
+        <div className="mb-5 flex items-center gap-4">
+          <button onClick={openAdd} className="flex items-center gap-2 rounded-2xl bg-brand px-5 py-3 text-base text-white hover:bg-brand-dark">
+            <Plus className="h-4 w-4" />
+            新增模型
           </button>
           {models.length > 1 && (
-            <span className="flex items-center gap-1 text-xs text-gray-400">
-              <GripVertical className="h-3 w-3" />
+            <div className="flex items-center gap-1.5 text-sm text-slate-400">
+              <GripVertical className="h-4 w-4" />
               拖拽卡片可调整模型顺序
-            </span>
+            </div>
           )}
         </div>
 
-        {isAdding && (
-          <div className="mb-5 max-w-[420px] rounded-lg border border-gray-200 bg-white p-4">
-            <div className="space-y-3">
-              <input
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
-                placeholder="模型名称，例如 DeepSeek V4 Flash"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand"
-              />
-              <input
-                value={form.id}
-                onChange={(event) => setForm({ ...form, id: event.target.value })}
-                placeholder="模型 ID，例如 deepseek-v4-flash"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand"
-              />
-              <input
-                value={form.baseUrl}
-                onChange={(event) => setForm({ ...form, baseUrl: event.target.value })}
-                placeholder="Base URL"
-                className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand"
-              />
+        {showAdd && (
+          <div className="mb-6 max-w-[460px] rounded-[24px] border border-slate-200 bg-white p-5">
+            <div className="space-y-4">
+              <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="模型名称，例如 DeepSeek V4 Flash" className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-brand" />
+              <input value={form.id} onChange={(event) => setForm({ ...form, id: event.target.value })} placeholder="模型 ID，例如 deepseek-v4-flash" className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-brand" />
+              <input value={form.baseUrl} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} placeholder="接口地址" className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-brand" />
               <div className="relative">
                 <input
-                  type={showKey ? 'text' : 'password'}
+                  type={showAddKey ? 'text' : 'password'}
                   value={form.apiKey}
                   onChange={(event) => setForm({ ...form, apiKey: event.target.value })}
                   placeholder="API Key"
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 pr-10 text-sm outline-none focus:border-brand"
+                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 pr-11 text-sm outline-none focus:border-brand"
                 />
-                <button onClick={() => setShowKey((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                <button onClick={() => setShowAddKey((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500">
+                  {showAddKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              <button onClick={submitModel} disabled={!form.id.trim()} className="rounded-md bg-brand px-4 py-2 text-sm text-white hover:bg-brand-dark disabled:bg-gray-300">
+              <button onClick={submitAdd} disabled={!form.id.trim()} className="rounded-2xl bg-brand px-5 py-3 text-base text-white hover:bg-brand-dark disabled:bg-slate-300">
                 确认新增
               </button>
             </div>
           </div>
         )}
 
-        {models.length > 0 && (
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-5">
+        {models.length > 0 ? (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(360px,1fr))] gap-6">
             {models.map((model, index) => (
               <div
                 key={model.id}
                 draggable
-                onDragStart={() => { dragIndexRef.current = index; }}
+                onDragStart={() => {
+                  dragIndexRef.current = index;
+                }}
                 onDragOver={(event) => {
                   event.preventDefault();
                   setDragOverIndex(index);
@@ -112,52 +253,45 @@ export function ModelManagePage() {
                   dragIndexRef.current = null;
                   setDragOverIndex(null);
                 }}
-                className={`cursor-grab rounded-lg border p-[21px] transition-colors active:cursor-grabbing hover:border-gray-300 ${dragOverIndex === index ? 'border-brand ring-1 ring-brand' : 'border-gray-200 bg-white'}`}
+                className={`rounded-[24px] border bg-white p-6 transition-colors ${dragOverIndex === index ? 'border-brand ring-1 ring-brand' : 'border-slate-200'}`}
               >
-                <div className="mb-4 flex items-center gap-2.5">
-                  <div className={`flex h-10 w-10 items-center justify-center rounded-lg shrink-0 ${model.enabled ? 'bg-brand-light text-brand' : 'bg-gray-100 text-gray-400'}`}>
-                    <Bot className="h-5 w-5" />
+                <div className="mb-6 flex items-center gap-3">
+                  <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${model.enabled ? 'bg-brand-light text-brand' : 'bg-slate-100 text-slate-400'}`}>
+                    <Bot className="h-7 w-7" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-base font-bold text-gray-900">{model.name}</div>
+                    <div className="truncate text-[20px] font-bold text-slate-900">{model.name}</div>
+                    <div className="mt-2 text-[15px] text-slate-500">模型ID: {model.model}</div>
+                    <div className="mt-2 text-[15px] text-slate-500">状态: <span className={model.enabled ? 'text-emerald-600' : 'text-slate-400'}>{statusText(model)}</span></div>
                   </div>
                   <button
                     onClick={() => updateModel(model.id, { locked: !model.locked })}
-                    className={`shrink-0 rounded border px-2.5 py-1 text-sm transition-colors ${model.locked ? 'border-amber-300 bg-amber-50 text-amber-600 hover:bg-amber-100' : 'border-gray-200 text-gray-400 hover:bg-gray-50 hover:text-gray-600'}`}
+                    className={`rounded-xl border px-4 py-2 text-base transition-colors ${
+                      model.locked ? 'border-amber-300 bg-amber-50 text-amber-600 hover:bg-amber-100' : 'border-slate-200 text-slate-400 hover:bg-slate-50'
+                    }`}
                   >
                     {model.locked ? '已锁定' : '锁定'}
                   </button>
                 </div>
 
-                <div className="mb-4 space-y-2">
-                  <div className="flex items-center gap-1 text-sm text-gray-500">
-                    <span className="shrink-0">模型ID:</span>
-                    <span className="truncate text-gray-700">{model.model}</span>
+                <div className="space-y-3 border-t border-slate-100 pt-5">
+                  <div className="flex items-center gap-3">
+                    <button onClick={() => openEdit(model)} className="flex-1 rounded-xl border border-brand/30 py-3 text-base text-brand hover:bg-brand-light">编辑模型</button>
+                    <button onClick={() => void testModel(model)} className="flex-1 rounded-xl border border-sky-300 py-3 text-base text-sky-500 hover:bg-sky-50">API 测试</button>
                   </div>
-                  <div className="flex items-center gap-1 text-sm text-gray-500">
-                    <span className="shrink-0">状态:</span>
-                    <span className={model.enabled ? 'text-emerald-600' : 'text-gray-400'}>{model.enabled ? '正常' : '未启用'}</span>
-                  </div>
-                </div>
-
-                <div className="space-y-2 border-t border-gray-100 pt-4">
-                  <div className="flex items-center gap-2">
-                    <button className="flex-1 rounded border border-brand/30 py-1.5 text-sm text-brand hover:bg-brand-light">编辑模型</button>
-                    <button className="flex-1 rounded border border-sky-300 py-1.5 text-sm text-sky-500 hover:bg-sky-50">API测试</button>
-                  </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     <button
                       onClick={() => updateModel(model.id, { enabled: !model.enabled })}
-                      className={`flex-1 rounded border py-1.5 text-sm transition-colors ${model.enabled ? 'border-orange-300 text-orange-600 hover:bg-orange-50' : 'border-brand/30 text-brand hover:bg-brand-light'}`}
+                      className={`flex-1 rounded-xl border py-3 text-base transition-colors ${model.enabled ? 'border-orange-300 text-orange-600 hover:bg-orange-50' : 'border-brand/30 text-brand hover:bg-brand-light'}`}
                     >
-                      {model.enabled ? '取消启用' : '模型启动'}
+                      {model.enabled ? '取消启用' : '启用模型'}
                     </button>
                     <button
                       onClick={() => {
-                        if (!model.locked && window.confirm(`确定要删除“${model.name}”吗？`)) deleteModel(model.id);
+                        if (!model.locked) setDeleteTarget(model);
                       }}
                       disabled={model.locked}
-                      className={`flex-1 rounded border py-1.5 text-sm transition-colors ${model.locked ? 'cursor-not-allowed border-gray-200 text-gray-300' : 'border-red-300 text-red-500 hover:bg-red-50'}`}
+                      className={`flex-1 rounded-xl border py-3 text-base transition-colors ${model.locked ? 'cursor-not-allowed border-slate-200 text-slate-300' : 'border-red-300 text-red-500 hover:bg-red-50'}`}
                     >
                       {model.locked ? '已锁定' : '删除'}
                     </button>
@@ -166,14 +300,43 @@ export function ModelManagePage() {
               </div>
             ))}
           </div>
-        )}
-
-        {models.length === 0 && !isAdding && (
-          <div className="py-10 text-center text-sm text-gray-400">
-            暂无模型，请点击“新增模型”
-          </div>
+        ) : (
+          !showAdd && <div className="py-14 text-center text-base text-slate-400">暂无模型，请点击“新增模型”</div>
         )}
       </div>
+
+      <ModelEditorModal
+        isOpen={!!editing}
+        title="编辑模型"
+        initial={editing ? { name: editing.name, id: editing.id, baseUrl: editing.baseUrl, apiKey: editing.apiKey } : { name: '', id: '', baseUrl: '', apiKey: '' }}
+        onClose={() => setEditing(null)}
+        onSave={(draft) => {
+          if (!editing) return;
+          updateModel(editing.id, { name: draft.name, id: draft.id, baseUrl: draft.baseUrl, apiKey: draft.apiKey, model: draft.id });
+          setEditing(null);
+          showToast('保存成功');
+        }}
+      />
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        title="确认删除"
+        description={`确定要删除模型「${deleteTarget?.name ?? ''}」吗？\n删除后将无法恢复。`}
+        confirmText="确认删除"
+        confirmVariant="danger"
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) deleteModel(deleteTarget.id);
+          setDeleteTarget(null);
+          showToast('模型已删除');
+        }}
+      />
+
+      {toast && (
+        <div className="fixed bottom-6 right-6 z-[160] rounded-2xl bg-slate-900 px-4 py-3 text-sm text-white shadow-lg">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

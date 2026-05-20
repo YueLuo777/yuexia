@@ -142,7 +142,7 @@ async function ensureDevServer() {
     throw error;
   }
 
-  for (let i = 0; i < 120; i += 1) {
+  for (let i = 0; i < 160; i += 1) {
     if (await isReady(baseUrl)) {
       log('dev server ready');
       return;
@@ -153,18 +153,23 @@ async function ensureDevServer() {
   throw new Error('dev server timeout');
 }
 
+async function ensureElectronWindow(loadDist = false) {
+  startElectron(loadDist);
+  await new Promise((resolve) => setTimeout(resolve, 1200));
+}
+
 async function main() {
   log(`launcher mode=${mode} root=${root} port=${port} node=${process.version}`);
 
   if (mode === 'dist') {
-    startElectron(true);
+    await ensureElectronWindow(true);
     return;
   }
 
   await ensureDevServer();
 
   if (mode === 'desktop') {
-    startElectron(false);
+    await ensureElectronWindow(false);
     return;
   }
 

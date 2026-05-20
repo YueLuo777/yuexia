@@ -1,4 +1,4 @@
-import { BookMarked, Download, FileText, Play, RotateCcw, Settings, Sparkles, Upload, X } from 'lucide-react';
+import { BookMarked, ChevronDown, ChevronRight, Download, FileText, Play, RotateCcw, Settings, Sparkles, Upload, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -477,7 +477,7 @@ export function ExtractPage() {
                         className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm font-bold ${module.zone === 'system' ? 'bg-orange-50 text-orange-600' : 'bg-sky-50 text-sky-600'}`}
                       >
                         <span>{module.label}</span>
-                        <span>{collapsed ? '展开' : '收起'}</span>
+                        {collapsed ? <ChevronRight className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
                       </button>
                       {!collapsed && (
                         <div className="whitespace-pre-wrap p-3 text-xs leading-6 text-gray-600">{module.instruction}</div>

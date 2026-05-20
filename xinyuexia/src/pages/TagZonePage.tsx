@@ -1,5 +1,6 @@
 import { CheckCircle, Edit3, Plus, Tag, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
 
 interface TagItem {
   id: string;
@@ -41,6 +42,7 @@ export default function TagZonePage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [toast, setToast] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<TagItem | null>(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(tags));
@@ -68,9 +70,9 @@ export default function TagZonePage() {
   };
 
   const handleDelete = (id: string) => {
-    if (!window.confirm('确定删除此标签吗？')) return;
-    setTags((prev) => prev.filter((item) => item.id !== id));
-    showToast('标签已删除');
+    const target = tags.find((item) => item.id === id);
+    if (!target) return;
+    setDeleteTarget(target);
   };
 
   const handleEditStart = (tag: TagItem) => {
@@ -191,6 +193,22 @@ export default function TagZonePage() {
           {toast}
         </div>
       )}
+
+      <ConfirmDialog
+        isOpen={!!deleteTarget}
+        title="确认删除"
+        description={`确定删除标签“${deleteTarget?.name ?? ''}”吗？删除后将无法恢复。`}
+        confirmText="确认删除"
+        confirmVariant="danger"
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) {
+            setTags((prev) => prev.filter((item) => item.id !== deleteTarget.id));
+            showToast('标签已删除');
+          }
+          setDeleteTarget(null);
+        }}
+      />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEvent } from 'react';
-import { BookOpen, CheckCircle, Loader2, RotateCcw, Sparkles, Upload, X } from 'lucide-react';
+import { CheckCircle, Loader2, RotateCcw, Sparkles, Upload, X, BookOpen } from 'lucide-react';
 
 import { useNovelLibrary, type ImportedChapterInput } from '@/features/novels/hooks/useNovelLibrary';
 import type { WorkType } from '@/features/novels/model/novelTypes';
@@ -25,7 +25,7 @@ interface SmartImportResult {
   totalWordCount: number;
 }
 
-const CHAPTER_TITLE_REGEX = /(?:^|\n)\s*(?:第[一二三四五六七八九十百千零\d]+章|第\d+章|Chapter\s+\d+|序章|楔子|引子|开篇|终章|尾声)[\s：:\-.、]*([^\n]*)/gi;
+const CHAPTER_TITLE_REGEX = /(?:^|\n)\s*(?:第[一二三四五六七八九十百千万零\d]+章|第\d+章|Chapter\s+\d+|序章|楔子|引子|开篇|终章|尾声)[\s：:\-、.]*([^\n]*)/gi;
 
 function parseBookName(content: string): string | null {
   const match = content.match(/书名[：:]\s*(.+)/);
@@ -33,79 +33,73 @@ function parseBookName(content: string): string | null {
 }
 
 function parseSynopsis(content: string): string | null {
-  let synopsis: string | null = null;
-  const introIdx = content.search(/简介[：:]\s*\n?/i);
-  if (introIdx !== -1) {
-    const afterIntro = content.slice(introIdx + content.slice(introIdx).match(/简介[：:]\s*\n?/i)![0].length);
-    const stopPatterns = [
-      /\n\s*[-=·~*]{3,}\s*\n/,
-      /\n\s*(?:第[一二三四五六七八九十百千零\d]+章|第\d+章|Chapter\s+\d+|序章|楔子|引子|正文|目录|章节目录)\s*[：:]/i,
-      /\n\s*(?:作者[：:]|分类[：:]|标签[：:]|状态[：:])\s*/i,
-    ];
-    let stopPos = afterIntro.length;
-    for (const pattern of stopPatterns) {
-      const match = afterIntro.match(pattern);
-      if (match && match.index !== undefined && match.index < stopPos) {
-        stopPos = match.index;
-      }
+  const introMatch = content.match(/简介[：:]\s*\n?/);
+  if (!introMatch) return null;
+  const start = content.indexOf(introMatch[0]) + introMatch[0].length;
+  const rest = content.slice(start);
+  const stopPatterns = [
+    /\n\s*[-=·~*]{3,}\s*\n/,
+    /\n\s*(?:第[一二三四五六七八九十百千万零\d]+章|第\d+章|Chapter\s+\d+|正文|目录|章节目录)\s*[：:]?/i,
+    /\n\s*(?:作者[：:]|分类[：:]|标签[：:]|状态[：:])\s*/i,
+  ];
+  let stopPos = rest.length;
+  for (const pattern of stopPatterns) {
+    const result = rest.match(pattern);
+    if (result && result.index !== undefined && result.index < stopPos) {
+      stopPos = result.index;
     }
-    synopsis = afterIntro.slice(0, stopPos).trim();
   }
-  if (synopsis && synopsis.length > 800) synopsis = `${synopsis.slice(0, 800)}...`;
-  return synopsis;
+  const synopsis = rest.slice(0, stopPos).trim();
+  return synopsis.length > 0 ? synopsis.slice(0, 800) : null;
 }
 
 function parseChapters(content: string): ParsedChapter[] {
-  const chapters: ParsedChapter[] = [];
-  const matches: { index: number; title: string; rawLine: string }[] = [];
-
+  const matches: { index: number; title: string; raw: string }[] = [];
   const regex = new RegExp(CHAPTER_TITLE_REGEX.source, 'gi');
   let match: RegExpExecArray | null;
+
   while ((match = regex.exec(content)) !== null) {
     matches.push({
       index: match.index,
-      title: match[1]?.trim() || match[0].trim(),
-      rawLine: match[0],
+      title: (match[1] ?? match[0]).trim(),
+      raw: match[0],
     });
   }
 
   if (matches.length === 0) return [];
 
-  for (let i = 0; i < matches.length; i += 1) {
-    const start = matches[i].index + matches[i].rawLine.length;
-    const end = i < matches.length - 1 ? matches[i + 1].index : content.length;
-    const chapterContent = content.slice(start, end).trim();
-    const cleanContent = chapterContent.replace(/^\s*\n+/, '').trim();
-    chapters.push({
-      title: matches[i].title,
+  return matches.map((current, index) => {
+    const start = current.index + current.raw.length;
+    const end = index < matches.length - 1 ? matches[index + 1].index : content.length;
+    const rawContent = content.slice(start, end).trim();
+    const cleanContent = rawContent.replace(/^\s*\n+/, '').trim();
+    return {
+      title: current.title || `第${index + 1}章`,
       content: cleanContent,
       wordCount: cleanContent.length,
-    });
-  }
-  return chapters;
+    };
+  });
 }
 
 function parseSmartImport(content: string): SmartImportResult {
   const bookName = parseBookName(content);
   const synopsis = parseSynopsis(content);
   const chapters = parseChapters(content);
-  const totalWordCount = chapters.reduce((sum, chapter) => sum + chapter.wordCount, 0);
+  const totalWordCount = chapters.reduce((sum, item) => sum + item.wordCount, 0);
   return { bookName, synopsis, chapters, totalWordCount };
 }
 
 async function extractTextFromDocx(arrayBuffer: ArrayBuffer): Promise<string> {
   try {
-    const decoder = new TextDecoder('utf-8');
-    const text = decoder.decode(arrayBuffer);
-    const matches = text.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
-    if (matches && matches.length > 0) {
-      return matches.map((item) => item.replace(/<w:t[^>]*>|<\/w:t>/g, '')).join('');
+    const utf8 = new TextDecoder('utf-8').decode(arrayBuffer);
+    const utf8Matches = utf8.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
+    if (utf8Matches && utf8Matches.length > 0) {
+      return utf8Matches.map((item) => item.replace(/<w:t[^>]*>|<\/w:t>/g, '')).join('');
     }
-    const decoder16 = new TextDecoder('utf-16le');
-    const text16 = decoder16.decode(arrayBuffer);
-    const matches16 = text16.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
-    if (matches16 && matches16.length > 0) {
-      return matches16.map((item) => item.replace(/<w:t[^>]*>|<\/w:t>/g, '')).join('');
+    const utf16 = new TextDecoder('utf-16le').decode(arrayBuffer);
+    const utf16Matches = utf16.match(/<w:t[^>]*>([^<]+)<\/w:t>/g);
+    if (utf16Matches && utf16Matches.length > 0) {
+      return utf16Matches.map((item) => item.replace(/<w:t[^>]*>|<\/w:t>/g, '')).join('');
     }
   } catch {
     // ignore
@@ -153,7 +147,7 @@ export function ImportModal({ isOpen, onClose, defaultType = 'novel' }: ImportMo
       const arrayBuffer = await file.arrayBuffer();
       content = await extractTextFromDocx(arrayBuffer);
       if (!content || content.length < 10) {
-        throw new Error('当前 doc/docx 文件无法提取文本，建议先转成 txt 再导入。');
+        throw new Error('当前 doc/docx 文件无法提取文本，请先转成 txt 再导入。');
       }
     }
     setParsedResult(parseSmartImport(content));
@@ -175,7 +169,6 @@ export function ImportModal({ isOpen, onClose, defaultType = 'novel' }: ImportMo
     setSelectedFile(file);
     setFileName(file.name);
     setParsedResult(null);
-
     setIsParsing(true);
     try {
       await parseSelectedFile(file);
@@ -209,14 +202,11 @@ export function ImportModal({ isOpen, onClose, defaultType = 'novel' }: ImportMo
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="flex w-[680px] max-w-[92vw] flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+      <div className="flex w-[720px] max-w-[92vw] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
           <h2 className="text-base font-bold text-gray-900">导入作品</h2>
-          <button
-            onClick={resetAndClose}
-            className="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-          >
-            <X className="h-5 w-5" />
+          <button onClick={resetAndClose} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
+            <X className="h-4 w-4" />
           </button>
         </div>
 
@@ -265,23 +255,12 @@ export function ImportModal({ isOpen, onClose, defaultType = 'novel' }: ImportMo
           <div className="flex flex-col rounded-lg border border-gray-200 p-4">
             <div className="mb-2 flex items-center gap-3">
               <span className="text-sm text-gray-700">选择文件</span>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".txt,.doc,.docx"
-                className="hidden"
-                onChange={handleFileChange}
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50"
-              >
+              <input ref={fileInputRef} type="file" accept=".txt,.doc,.docx" className="hidden" onChange={handleFileChange} />
+              <button onClick={() => fileInputRef.current?.click()} className="rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 transition-colors hover:bg-gray-50">
                 选择文件
               </button>
             </div>
-            <p className="text-xs text-gray-400">
-              {fileName || '未选择文件（支持 .txt / .doc / .docx，最大 50MB）'}
-            </p>
+            <p className="text-xs text-gray-400">{fileName || '未选择文件（支持 .txt / .doc / .docx，最大 50MB）'}</p>
           </div>
 
           <div className="overflow-hidden rounded-lg border border-orange-200">
@@ -336,7 +315,6 @@ export function ImportModal({ isOpen, onClose, defaultType = 'novel' }: ImportMo
                       <span className="text-sm italic text-gray-400">未识别</span>
                     )}
                   </div>
-
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 flex min-w-[60px] items-center gap-1.5">
                       <Sparkles className="h-3.5 w-3.5 text-gray-400" />
@@ -348,7 +326,6 @@ export function ImportModal({ isOpen, onClose, defaultType = 'novel' }: ImportMo
                       <span className="text-sm italic text-gray-400">未识别</span>
                     )}
                   </div>
-
                   <div className="flex items-start gap-3">
                     <div className="mt-0.5 flex min-w-[60px] items-center gap-1.5">
                       <Upload className="h-3.5 w-3.5 text-gray-400" />
