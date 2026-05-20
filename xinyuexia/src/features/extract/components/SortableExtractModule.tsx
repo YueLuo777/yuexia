@@ -1,4 +1,4 @@
-import { Check, GripVertical, Layers, Lock } from 'lucide-react';
+import { Check, GripVertical, Layers, Lock, Unlock } from 'lucide-react';
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 
 import type { ExtractModule } from '@/features/extract/model/extractTypes';
@@ -9,6 +9,7 @@ interface SortableExtractModuleProps {
   isDragOver: boolean;
   onSelect: (id: string) => void;
   onToggleActive: (id: string) => void;
+  onToggleZone: (id: string) => void;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
   onDragOver: (id: string) => void;
@@ -21,6 +22,7 @@ export function SortableExtractModule({
   isDragOver,
   onSelect,
   onToggleActive,
+  onToggleZone,
   onDragStart,
   onDragEnd,
   onDragOver,
@@ -51,7 +53,6 @@ export function SortableExtractModule({
   };
 
   const handlePointerDown = (event: ReactPointerEvent) => {
-    if (module.locked) return;
     pressStartRef.current = { x: event.clientX, y: event.clientY };
     clearPressTimer();
     pressTimerRef.current = window.setTimeout(() => {
@@ -69,12 +70,11 @@ export function SortableExtractModule({
   };
 
   const handlePointerUp = () => {
-    if (!nativeDraggingRef.current) {
-      resetDragState();
-    } else {
-      clearPressTimer();
-    }
+    if (!nativeDraggingRef.current) resetDragState();
+    else clearPressTimer();
   };
+
+  const isSystem = module.zone === 'system';
 
   return (
     <div
@@ -125,21 +125,23 @@ export function SortableExtractModule({
           >
             {module.active && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
           </span>
-          <Layers className={`h-3.5 w-3.5 shrink-0 ${module.active ? 'text-brand' : 'text-gray-400'}`} />
+          <Layers className={`h-3.5 w-3.5 shrink-0 ${isSystem ? 'text-amber-500' : module.active ? 'text-brand' : 'text-gray-400'}`} />
           <span className={`truncate text-xs ${isSelected ? 'font-medium text-brand' : 'text-gray-700'}`}>{module.label}</span>
-          {module.locked && <Lock className="ml-auto h-3 w-3 shrink-0 text-amber-500" />}
+          <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${isSystem ? 'bg-amber-50 text-amber-600' : 'bg-sky-50 text-sky-600'}`}>
+            {isSystem ? '系统' : '输出'}
+          </span>
+          <button
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggleZone(module.id);
+            }}
+            className={`ml-1 rounded p-0.5 transition-colors ${isSystem ? 'text-amber-500 hover:bg-amber-50' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'}`}
+            title={isSystem ? '改为输出模块' : '改为系统指令'}
+          >
+            {isSystem ? <Lock className="h-3 w-3" /> : <Unlock className="h-3 w-3" />}
+          </button>
         </button>
       </div>
-    </div>
-  );
-}
-
-export function ExtractModuleOverlay({ module }: { module: ExtractModule }) {
-  return (
-    <div className="flex w-[220px] items-center gap-2 rounded-lg border border-brand/30 bg-white px-3 py-2 text-xs font-medium text-gray-800 shadow-2xl ring-4 ring-brand/10">
-      <GripVertical className="h-3.5 w-3.5 text-brand" />
-      <Layers className="h-3.5 w-3.5 text-brand" />
-      <span className="truncate">{module.label}</span>
     </div>
   );
 }

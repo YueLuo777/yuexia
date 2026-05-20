@@ -10,7 +10,6 @@ const DEFAULT_MODULES: ExtractModule[] = [
     label: '剧情身份定义',
     zone: 'system',
     active: true,
-    locked: true,
     instruction: '你是资深小说剧情结构分析师，负责从章节中提炼可复用的剧情调用卡。',
   },
   {
@@ -18,22 +17,42 @@ const DEFAULT_MODULES: ExtractModule[] = [
     label: '强制规则',
     zone: 'system',
     active: true,
-    locked: true,
     instruction: '输出必须简洁、中文、按模块分段；没有实质剧情时标记为“跳过”。',
   },
   {
-    id: 'plot',
-    label: '剧情',
-    zone: 'output',
+    id: 'variables',
+    label: '变量词典',
+    zone: 'system',
     active: true,
-    instruction: '概括本章核心剧情：谁在什么情境下做了什么，产生什么结果。',
+    instruction: '对人物、势力、地点、道具等专有名词保持一致表达，避免同义混写。',
   },
   {
-    id: 'logic',
-    label: '剧情因果逻辑',
+    id: 'format',
+    label: '输出格式',
+    zone: 'system',
+    active: true,
+    instruction: '按当前启用模块逐项输出，每个模块单独成段，不要输出无关解释。',
+  },
+  {
+    id: 'score',
+    label: '评分',
     zone: 'output',
     active: true,
-    instruction: '拆解本章事件的原因、决策和结果，标明作用对象。',
+    instruction: '从张力、新颖度、情绪冲击和综合价值四个维度给出 0-100 分。',
+  },
+  {
+    id: 'summary',
+    label: '剧情概概',
+    zone: 'output',
+    active: true,
+    instruction: '概括本章重要剧情线、起因、冲突、结果和首次出现的信息变化。',
+  },
+  {
+    id: 'followup',
+    label: '后续构思',
+    zone: 'output',
+    active: true,
+    instruction: '基于当前剧情，给出可能的后续推进方向。',
   },
   {
     id: 'state',
@@ -43,25 +62,18 @@ const DEFAULT_MODULES: ExtractModule[] = [
     instruction: '列出角色关系、资源、认知、局势和悬念的变化。',
   },
   {
-    id: 'next',
-    label: '后续构思',
+    id: 'logic',
+    label: '因果逻辑',
     zone: 'output',
     active: true,
-    instruction: '基于当前剧情，给出可能的后续推进方向。',
+    instruction: '拆解事件的原因、决策和结果，标明作用对象。',
   },
   {
     id: 'tags',
-    label: '剧情点标签',
+    label: '主题标签',
     zone: 'output',
     active: true,
     instruction: '用短标签概括剧情类型，例如反转、铺垫、冲突升级、信息差。',
-  },
-  {
-    id: 'score',
-    label: '评分',
-    zone: 'output',
-    active: true,
-    instruction: '从张力、新颖度、情绪冲击和综合价值四个维度给出 0-100 分。',
   },
 ];
 
@@ -109,11 +121,11 @@ export function useExtractModules() {
 
   const toggleActive = useCallback((id: string) => {
     persist((prev) => prev.map((module) => (
-      module.id === id && !module.locked ? { ...module, active: !module.active } : module
+      module.id === id ? { ...module, active: !module.active } : module
     )));
   }, [persist]);
 
-  const updateModule = useCallback((id: string, updates: Partial<Pick<ExtractModule, 'label' | 'instruction'>>) => {
+  const updateModule = useCallback((id: string, updates: Partial<Pick<ExtractModule, 'label' | 'instruction' | 'zone'>>) => {
     persist((prev) => prev.map((module) => (module.id === id ? { ...module, ...updates } : module)));
   }, [persist]);
 
@@ -122,26 +134,11 @@ export function useExtractModules() {
       const activeIndex = prev.findIndex((module) => module.id === activeId);
       if (activeIndex < 0) return prev;
 
-      const activeModule = prev[activeIndex];
-      const overModule = prev.find((module) => module.id === overId);
-      const targetZone: ExtractZone = overModule?.zone ?? (overId === 'system' || overId === 'output' ? overId : activeModule.zone);
       const withoutActive = prev.filter((module) => module.id !== activeId);
-
-      let insertIndex = withoutActive.length;
-      if (overModule) {
-        const overIndex = withoutActive.findIndex((module) => module.id === overModule.id);
-        insertIndex = overIndex >= 0 ? overIndex : insertIndex;
-      } else {
-        const modulesInTargetZone = withoutActive
-          .map((module, index) => ({ module, index }))
-          .filter((item) => item.module.zone === targetZone);
-        const lastInZone = modulesInTargetZone[modulesInTargetZone.length - 1];
-        insertIndex = lastInZone ? lastInZone.index + 1 : withoutActive.findIndex((module) => module.zone !== targetZone);
-        if (insertIndex < 0) insertIndex = withoutActive.length;
-      }
-
+      const overIndex = withoutActive.findIndex((module) => module.id === overId);
+      const insertIndex = overIndex >= 0 ? overIndex : withoutActive.length;
       const next = [...withoutActive];
-      next.splice(insertIndex, 0, { ...activeModule, zone: targetZone });
+      next.splice(insertIndex, 0, prev[activeIndex]);
       return next;
     });
   }, [persist]);

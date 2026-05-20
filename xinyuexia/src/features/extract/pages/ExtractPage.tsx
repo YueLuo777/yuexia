@@ -1,11 +1,11 @@
 import { BookMarked, Download, FileText, Play, RotateCcw, Settings, Sparkles, Upload, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { ExtractDropZone } from '@/features/extract/components/ExtractDropZone';
+import { SortableExtractModule } from '@/features/extract/components/SortableExtractModule';
 import { useExtractModules } from '@/features/extract/hooks/useExtractModules';
 import { useExtractNovels } from '@/features/extract/hooks/useExtractNovels';
-import type { ExtractModule, ExtractResult, ExtractZone } from '@/features/extract/model/extractTypes';
+import type { ExtractModule, ExtractResult } from '@/features/extract/model/extractTypes';
 import { readModelSnapshot } from '@/features/models/hooks/useModels';
 import type { ModelItem } from '@/features/models/model/modelTypes';
 import { callModel } from '@/features/models/services/callModel';
@@ -48,16 +48,20 @@ function writeHistory(history: ExtractHistoryItem[]) {
 }
 
 function buildSystemPrompt(modules: ExtractModule[]) {
-  return modules.map((module) => `【${module.label}】\n${module.instruction.trim()}`).join('\n\n');
+  return modules
+    .filter((module) => module.active && module.zone === 'system')
+    .map((module) => `【${module.label}】\n${module.instruction.trim()}`)
+    .join('\n\n');
 }
 
 function buildExtractRequest(file: UploadFileItem, modules: ExtractModule[]) {
+  const outputModules = modules.filter((module) => module.active && module.zone === 'output');
   return [
     '请阅读以下章节正文，并按要求输出提炼结果。',
     `文件名：${file.name}`,
     '',
-    '【提炼模块】',
-    ...modules.map((module) => `【${module.label}】\n${module.instruction.trim()}`),
+    '【输出模块】',
+    ...outputModules.map((module) => `【${module.label}】\n${module.instruction.trim()}`),
     '',
     '【正文】',
     file.content.trim() || '暂无正文',
@@ -125,11 +129,9 @@ export function ExtractPage() {
   const novels = useExtractNovels();
   const {
     modules,
-    systemModules,
-    outputModules,
     activeModules,
-    toggleActive,
     updateModule,
+    toggleActive,
     moveModule,
     exportExtractConfig,
     importExtractConfig,
@@ -140,9 +142,8 @@ export function ExtractPage() {
   const [selectedModelId, setSelectedModelId] = useState('');
   const [selectedNovelId, setSelectedNovelId] = useState<number | null>(novels.find((novel) => novel.type === 'novel')?.id ?? null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(modules[0]?.id ?? null);
-  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
-  const [dragOverZone, setDragOverZone] = useState<ExtractZone | null>(null);
   const [extractMode, setExtractMode] = useState<ExtractMode>('chapter');
   const [outputMode, setOutputMode] = useState<OutputMode>('single');
   const [chaptersPerBatch, setChaptersPerBatch] = useState(3);
@@ -183,23 +184,21 @@ export function ExtractPage() {
   const selectedModel = models.find((model) => model.id === selectedModelId) ?? null;
   const selectedNovel = novels.find((novel) => novel.id === selectedNovelId) ?? null;
   const selectedModule = modules.find((module) => module.id === selectedModuleId) ?? null;
-  const activeSystemModules = activeModules.filter((module) => module.zone === 'system');
-  const activeOutputModules = activeModules.filter((module) => module.zone === 'output');
   const selectedFiles = files.filter((file) => file.selected);
-
+  const activeOutputModules = activeModules.filter((module) => module.zone === 'output');
   const canExtract = Boolean(selectedModel && selectedFiles.length > 0 && activeOutputModules.length > 0 && !isExtracting);
 
-  const resetDragState = () => {
-    setActiveDragId(null);
-    setDragOverId(null);
-    setDragOverZone(null);
+  const handleToggleZone = (id: string) => {
+    const target = modules.find((module) => module.id === id);
+    if (!target) return;
+    updateModule(id, { zone: target.zone === 'system' ? 'output' : 'system' });
   };
 
-  const handleDropTarget = (overId: string | ExtractZone) => {
-    if (activeDragId && activeDragId !== overId) {
-      moveModule(activeDragId, overId);
-    }
-    resetDragState();
+  const handleDropModule = (targetId: string) => {
+    if (!draggingId || draggingId === targetId) return;
+    moveModule(draggingId, targetId);
+    setDraggingId(null);
+    setDragOverId(null);
   };
 
   const handleFiles = async (fileList: FileList | File[]) => {
@@ -224,13 +223,13 @@ export function ExtractPage() {
       setSaveMessage('请先在“模型管理”中配置并启用 AI 模型');
       return;
     }
-    if (selectedFiles.length === 0 || activeOutputModules.length === 0 || isExtracting) return;
+    if (!canExtract) return;
 
     setIsExtracting(true);
     setResults([]);
     setSaveMessage('');
 
-    const systemPrompt = buildSystemPrompt(activeSystemModules);
+    const systemPrompt = buildSystemPrompt(modules);
     const nextResults: ExtractResult[] = [];
 
     for (let index = 0; index < selectedFiles.length; index += 1) {
@@ -240,22 +239,21 @@ export function ExtractPage() {
         const content = await callModel({
           model: selectedModel,
           prompt: systemPrompt,
-          userContent: buildExtractRequest(file, activeOutputModules),
+          userContent: buildExtractRequest(file, modules),
         });
         nextResults.push({
           id: `${file.id}-${index}`,
           chapterTitle: file.name,
           content,
         });
-        setResults([...nextResults]);
       } catch (error) {
         nextResults.push({
           id: `${file.id}-${index}`,
           chapterTitle: file.name,
           content: error instanceof Error ? `【错误】${error.message}` : '【错误】模型请求失败。',
         });
-        setResults([...nextResults]);
       }
+      setResults([...nextResults]);
     }
 
     const extractModeLabel = extractMode === 'chapter'
@@ -310,19 +308,19 @@ export function ExtractPage() {
                 a.click();
                 URL.revokeObjectURL(url);
               }}
-              className="flex items-center gap-1 px-3 py-1.5 text-[11px] text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              className="flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1.5 text-[11px] text-gray-600 transition-colors hover:bg-gray-200"
             >
               <FileText className="h-3 w-3" /> 导出配置
             </button>
             <button
               onClick={() => { setShowImportConfig(true); setImportText(''); setImportMessage(''); }}
-              className="flex items-center gap-1 px-3 py-1.5 text-[11px] text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              className="flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1.5 text-[11px] text-gray-600 transition-colors hover:bg-gray-200"
             >
               <FileText className="h-3 w-3" /> 导入配置
             </button>
             <button
               onClick={() => setShowHistory(true)}
-              className="flex items-center gap-1 px-3 py-1.5 text-[11px] text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+              className="flex items-center gap-1 rounded-lg bg-gray-100 px-3 py-1.5 text-[11px] text-gray-600 transition-colors hover:bg-gray-200"
             >
               <FileText className="h-3 w-3" /> 提炼历史
               {history.length > 0 && <span className="ml-0.5 text-[9px] text-gray-400">({history.length})</span>}
@@ -331,71 +329,37 @@ export function ExtractPage() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <div className="flex w-[240px] shrink-0 flex-col border-r border-gray-200 bg-white">
-          <ExtractDropZone
-            id="system"
-            title="系统指令"
-            modules={systemModules}
-            selectedId={selectedModuleId}
-            activeDragId={activeDragId}
-            dragOverId={dragOverId}
-            dragOverZone={dragOverZone}
-            onSelect={setSelectedModuleId}
-            onToggleActive={toggleActive}
-            onDragStart={setActiveDragId}
-            onDragEnd={resetDragState}
-            onDragOverModule={(id) => {
-              setDragOverId(id);
-              setDragOverZone('system');
-            }}
-            onDragOverZone={(zone) => {
-              setDragOverZone(zone);
-              setDragOverId(null);
-            }}
-            onDropModule={handleDropTarget}
-            onDropZone={handleDropTarget}
-          />
-          <ExtractDropZone
-            id="output"
-            title="输出模块"
-            modules={outputModules}
-            selectedId={selectedModuleId}
-            activeDragId={activeDragId}
-            dragOverId={dragOverId}
-            dragOverZone={dragOverZone}
-            onSelect={setSelectedModuleId}
-            onToggleActive={toggleActive}
-            onDragStart={setActiveDragId}
-            onDragEnd={resetDragState}
-            onDragOverModule={(id) => {
-              setDragOverId(id);
-              setDragOverZone('output');
-            }}
-            onDragOverZone={(zone) => {
-              setDragOverZone(zone);
-              setDragOverId(null);
-            }}
-            onDropModule={handleDropTarget}
-            onDropZone={handleDropTarget}
-          />
-          <div className="border-t border-gray-100 px-2.5 py-2">
-            <button
-              onClick={() => {
-                resetExtractModules();
-                setSaveMessage('模块已重置');
-              }}
-              className="flex w-full items-center justify-center gap-1 rounded-md bg-brand-light px-2 py-1.5 text-[11px] text-brand hover:bg-brand-light/80"
-            >
-              <RotateCcw className="h-3 w-3" />
-              重置模块
-            </button>
+      <div className="flex min-h-0 flex-1 overflow-x-auto">
+        <aside className="w-[240px] shrink-0 border-r border-gray-200 bg-white">
+          <div className="border-b border-gray-100 px-3 py-3">
+            <div className="text-sm font-bold text-gray-900">模块列表</div>
+            <div className="mt-1 text-[11px] leading-5 text-gray-400">锁图标表示系统指令效果：隐藏输入给 AI，不直接面向用户输出。</div>
           </div>
-        </div>
+          <div className="h-[calc(100%-98px)] overflow-y-auto">
+            {modules.map((module) => (
+              <SortableExtractModule
+                key={module.id}
+                module={module}
+                isSelected={selectedModuleId === module.id}
+                isDragOver={dragOverId === module.id && draggingId !== module.id}
+                onSelect={setSelectedModuleId}
+                onToggleActive={toggleActive}
+                onToggleZone={handleToggleZone}
+                onDragStart={setDraggingId}
+                onDragEnd={() => {
+                  setDraggingId(null);
+                  setDragOverId(null);
+                }}
+                onDragOver={setDragOverId}
+                onDrop={handleDropModule}
+              />
+            ))}
+          </div>
+        </aside>
 
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="mb-4 grid grid-cols-[1.1fr_1.2fr_2.2fr] gap-3">
-            <div className="rounded-xl border border-gray-200 bg-white p-3">
+        <main className="min-w-[920px] flex-1 p-4">
+          <div className="grid grid-cols-[240px_260px_minmax(520px,1fr)] gap-3">
+            <section className="rounded-xl border border-gray-200 bg-white p-3">
               <h3 className="mb-2 flex items-center gap-1 text-xs font-bold text-gray-900">
                 <Settings className="h-3.5 w-3.5 text-brand" /> AI 模型
               </h3>
@@ -424,9 +388,9 @@ export function ExtractPage() {
                   ))}
                 </div>
               )}
-            </div>
+            </section>
 
-            <div className="rounded-xl border border-gray-200 bg-white p-3">
+            <section className="rounded-xl border border-gray-200 bg-white p-3">
               <h3 className="mb-2 text-xs font-bold text-gray-900">提炼模式</h3>
               <div className="space-y-2">
                 <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors ${extractMode === 'chapter' ? 'border-brand bg-brand-light' : 'border-gray-200 hover:border-gray-300'}`}>
@@ -453,9 +417,9 @@ export function ExtractPage() {
                   </div>
                 </label>
               </div>
-            </div>
+            </section>
 
-            <div className="rounded-xl border border-gray-200 bg-white p-3">
+            <section className="rounded-xl border border-gray-200 bg-white p-3">
               <h3 className="mb-2 text-xs font-bold text-gray-900">导出设置</h3>
               <div className="space-y-2">
                 <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors ${outputMode === 'single' ? 'border-brand bg-brand-light' : 'border-gray-200 hover:border-gray-300'}`}>
@@ -474,12 +438,12 @@ export function ExtractPage() {
                   </div>
                 </label>
               </div>
-            </div>
+            </section>
           </div>
 
-          <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-4">
+          <div className="mt-4 grid grid-cols-[minmax(0,1fr)_420px] gap-4">
             <div className="space-y-4">
-              <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <section className="rounded-xl border border-gray-200 bg-white p-4">
                 <h3 className="mb-3 flex items-center gap-1.5 text-sm font-bold text-gray-900">
                   <FileText className="h-4 w-4 text-brand" /> 上传 TXT 文件
                 </h3>
@@ -493,7 +457,7 @@ export function ExtractPage() {
                     setIsDraggingFile(false);
                     void handleFiles(event.dataTransfer.files);
                   }}
-                  className={`flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-4 py-8 transition-all ${isDraggingFile ? 'border-brand bg-brand-light/40' : 'border-gray-200 hover:border-brand hover:bg-brand-light/30'}`}
+                  className={`flex h-[168px] w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-4 transition-all ${isDraggingFile ? 'border-brand bg-brand-light/40' : 'border-gray-200 hover:border-brand hover:bg-brand-light/30'}`}
                 >
                   <FileText className={`h-8 w-8 ${isDraggingFile ? 'text-brand' : 'text-gray-300'}`} />
                   <span className={`text-sm ${isDraggingFile ? 'font-medium text-brand' : 'text-gray-500'}`}>{isDraggingFile ? '松开上传' : '点击或拖拽 .txt 文件'}</span>
@@ -510,7 +474,7 @@ export function ExtractPage() {
                         <button onClick={() => setFiles([])} className="text-[10px] text-red-400 hover:underline">清空</button>
                       </div>
                     </div>
-                    <div className="max-h-40 divide-y divide-gray-50 overflow-y-auto rounded-lg border border-gray-100">
+                    <div className="max-h-[160px] divide-y divide-gray-50 overflow-y-auto rounded-lg border border-gray-100">
                       {[...files].reverse().map((file) => (
                         <div key={file.id} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-gray-50">
                           <input type="checkbox" checked={file.selected} onChange={() => setFiles((prev) => prev.map((item) => item.id === file.id ? { ...item, selected: !item.selected } : item))} className="h-3.5 w-3.5 rounded border-gray-300 text-brand focus:ring-brand" />
@@ -523,7 +487,7 @@ export function ExtractPage() {
                     </div>
                   </div>
                 )}
-              </div>
+              </section>
 
               <div className="flex items-center justify-between">
                 <span className="rounded-full border border-brand/20 bg-brand-light px-3 py-1 text-xs text-brand">
@@ -532,38 +496,15 @@ export function ExtractPage() {
                 <button
                   onClick={() => void handleExtract()}
                   disabled={!canExtract}
-                  className="flex items-center gap-1.5 rounded-lg bg-brand px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-gray-300"
+                  className="flex w-[168px] items-center justify-center gap-1.5 rounded-lg bg-brand px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-gray-300"
                 >
                   <Play className="h-4 w-4" /> {isExtracting ? '提炼中' : '开始提炼'}
                 </button>
               </div>
-
-              {results.length > 0 && (
-                <div className="rounded-xl border border-gray-200 bg-white p-4">
-                  <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-sm font-bold text-gray-900">提炼结果</h3>
-                    <button
-                      onClick={() => downloadText('提炼结果.txt', results.map((result) => `${result.chapterTitle}\n\n${result.content}`).join('\n\n---\n\n'))}
-                      className="rounded-md border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
-                    >
-                      <Download className="mr-1 inline h-3.5 w-3.5" />
-                      导出结果
-                    </button>
-                  </div>
-                  <div className="space-y-3">
-                    {results.map((result) => (
-                      <article key={result.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                        <h4 className="mb-2 text-xs font-bold text-gray-800">{result.chapterTitle}</h4>
-                        <pre className="whitespace-pre-wrap text-xs leading-6 text-gray-600">{result.content}</pre>
-                      </article>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
 
             <div className="space-y-4">
-              <div className="rounded-xl border border-gray-200 bg-white">
+              <section className="rounded-xl border border-gray-200 bg-white">
                 <div className="border-b border-gray-100 px-4 py-3">
                   <h3 className="text-sm font-bold text-gray-900">模块预览</h3>
                 </div>
@@ -584,21 +525,25 @@ export function ExtractPage() {
                     <div className="py-8 text-center text-sm text-gray-400">暂无激活模块</div>
                   )}
                 </div>
-              </div>
+              </section>
 
-              <div className="rounded-xl border border-gray-200 bg-white">
+              <section className="rounded-xl border border-gray-200 bg-white">
                 <div className="border-b border-gray-100 px-4 py-3">
                   <h3 className="text-sm font-bold text-gray-900">模块编辑</h3>
                 </div>
                 {selectedModule ? (
                   <div className="space-y-3 p-4">
+                    <div className={`rounded-lg px-3 py-2 text-xs font-medium text-white ${selectedModule.zone === 'system' ? 'bg-amber-500' : 'bg-sky-500'}`}>
+                      {selectedModule.zone === 'system'
+                        ? '系统指令效果：隐藏注入给 AI，不直接面向用户输出'
+                        : '输出模块效果：直接决定用户看到的提炼结果结构'}
+                    </div>
                     <label className="block">
                       <span className="mb-1.5 block text-xs font-medium text-gray-500">模块名称</span>
                       <input
                         value={selectedModule.label}
-                        disabled={selectedModule.locked}
                         onChange={(event) => updateModule(selectedModule.id, { label: event.target.value })}
-                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand disabled:bg-gray-50 disabled:text-gray-400"
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand"
                       />
                     </label>
                     <label className="block">
@@ -609,17 +554,14 @@ export function ExtractPage() {
                         className="h-[260px] w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm leading-6 outline-none focus:border-brand"
                       />
                     </label>
-                    <div className="rounded-lg bg-gray-50 p-3 text-xs leading-5 text-gray-500">
-                      当前区域：{selectedModule.zone === 'system' ? '系统指令' : '输出模块'}。锁定模块不能改名，但仍可继续调整内容和顺序。
-                    </div>
                   </div>
                 ) : (
-                  <div className="p-6 text-center text-sm text-gray-400">点击左侧或上方模块后，这里会显示编辑区。</div>
+                  <div className="p-6 text-center text-sm text-gray-400">点击左侧任意模块，这里显示编辑区。</div>
                 )}
-              </div>
+              </section>
             </div>
           </div>
-        </div>
+        </main>
       </div>
 
       {showHistory && (
@@ -631,7 +573,7 @@ export function ExtractPage() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="flex-1 overflow-y-auto space-y-3 p-4">
               {history.length === 0 ? (
                 <div className="py-12 text-center text-sm text-gray-400">暂无提炼记录</div>
               ) : history.map((item, index) => (
@@ -660,9 +602,7 @@ export function ExtractPage() {
                 className="h-[220px] w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm leading-6 outline-none focus:border-brand"
                 placeholder="粘贴配置 JSON，或点右下角选择配置文件"
               />
-              {importMessage && (
-                <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">{importMessage}</div>
-              )}
+              {importMessage && <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">{importMessage}</div>}
               <input
                 ref={fileImportRef}
                 type="file"
