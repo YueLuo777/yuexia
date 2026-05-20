@@ -116,8 +116,6 @@ export function ModelManagePage() {
   const { models, addModel, updateModel, deleteModel, reorderModels } = useModels();
   const [showAdd, setShowAdd] = useState(false);
   const [editing, setEditing] = useState<ModelItem | null>(null);
-  const [showAddKey, setShowAddKey] = useState(false);
-  const [form, setForm] = useState<ModelDraft>({ name: '', id: '', baseUrl: '', apiKey: '' });
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ModelItem | null>(null);
   const [toast, setToast] = useState('');
@@ -133,23 +131,11 @@ export function ModelManagePage() {
   const openAdd = () => {
     setEditing(null);
     setShowAdd(true);
-    setForm({ name: '', id: '', baseUrl: '', apiKey: '' });
   };
 
   const openEdit = (model: ModelItem) => {
     setEditing(model);
     setShowAdd(false);
-  };
-
-  const submitAdd = () => {
-    const created = addModel(form);
-    if (!created) {
-      showToast('模型 ID 已存在');
-      return;
-    }
-    setForm({ name: '', id: '', baseUrl: '', apiKey: '' });
-    setShowAdd(false);
-    showToast('模型已添加');
   };
 
   const testModel = async (model: ModelItem) => {
@@ -202,31 +188,6 @@ export function ModelManagePage() {
             </div>
           )}
         </div>
-
-        {showAdd && (
-          <div className="mb-6 max-w-[460px] rounded-[24px] border border-slate-200 bg-white p-5">
-            <div className="space-y-4">
-              <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="模型名称，例如 DeepSeek V4 Flash" className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-brand" />
-              <input value={form.id} onChange={(event) => setForm({ ...form, id: event.target.value })} placeholder="模型 ID，例如 deepseek-v4-flash" className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-brand" />
-              <input value={form.baseUrl} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} placeholder="接口地址" className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-brand" />
-              <div className="relative">
-                <input
-                  type={showAddKey ? 'text' : 'password'}
-                  value={form.apiKey}
-                  onChange={(event) => setForm({ ...form, apiKey: event.target.value })}
-                  placeholder="API Key"
-                  className="w-full rounded-2xl border border-slate-200 px-4 py-3 pr-11 text-sm outline-none focus:border-brand"
-                />
-                <button onClick={() => setShowAddKey((prev) => !prev)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500">
-                  {showAddKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              <button onClick={submitAdd} disabled={!form.id.trim()} className="rounded-2xl bg-brand px-5 py-3 text-base text-white hover:bg-brand-dark disabled:bg-slate-300">
-                确认新增
-              </button>
-            </div>
-          </div>
-        )}
 
         {models.length > 0 ? (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(360px,1fr))] gap-6">
@@ -306,15 +267,27 @@ export function ModelManagePage() {
       </div>
 
       <ModelEditorModal
-        isOpen={!!editing}
-        title="编辑模型"
+        isOpen={showAdd || !!editing}
+        title={editing ? '编辑模型' : '新增模型'}
         initial={editing ? { name: editing.name, id: editing.id, baseUrl: editing.baseUrl, apiKey: editing.apiKey } : { name: '', id: '', baseUrl: '', apiKey: '' }}
-        onClose={() => setEditing(null)}
-        onSave={(draft) => {
-          if (!editing) return;
-          updateModel(editing.id, { name: draft.name, id: draft.id, baseUrl: draft.baseUrl, apiKey: draft.apiKey, model: draft.id });
+        onClose={() => {
           setEditing(null);
-          showToast('保存成功');
+          setShowAdd(false);
+        }}
+        onSave={(draft) => {
+          if (editing) {
+            updateModel(editing.id, { name: draft.name, id: draft.id, baseUrl: draft.baseUrl, apiKey: draft.apiKey, model: draft.id });
+            setEditing(null);
+            showToast('保存成功');
+            return;
+          }
+          const created = addModel(draft);
+          if (!created) {
+            showToast('模型 ID 已存在');
+            return;
+          }
+          setShowAdd(false);
+          showToast('模型已添加');
         }}
       />
 

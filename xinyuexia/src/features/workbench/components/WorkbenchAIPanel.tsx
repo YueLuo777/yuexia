@@ -7,6 +7,7 @@ import { callModel } from '@/features/models/services/callModel';
 import type { ModelItem } from '@/features/models/model/modelTypes';
 import { readPromptSnapshot } from '@/features/prompts/hooks/usePrompts';
 import type { PromptItem } from '@/features/prompts/model/promptTypes';
+import { usePersistentState } from '@/shared/hooks/usePersistentState';
 
 interface WorkbenchAIPanelProps {
   selectedChapterTitle: string | null;
@@ -37,8 +38,8 @@ export function WorkbenchAIPanel({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [models, setModels] = useState<ModelItem[]>(() => readConfig().models);
   const [prompts, setPrompts] = useState<PromptItem[]>(() => readConfig().prompts);
-  const [selectedModelId, setSelectedModelId] = useState('');
-  const [selectedPromptId, setSelectedPromptId] = useState('');
+  const [selectedModelId, setSelectedModelId] = usePersistentState<string>('xinyuexia_workbench_ai_model', '');
+  const [selectedPromptId, setSelectedPromptId] = usePersistentState<string>('xinyuexia_workbench_ai_prompt', '');
   const [isLoading, setIsLoading] = useState(false);
   const [actionMessage, setActionMessage] = useState('');
 

@@ -9,6 +9,7 @@ import type { ExtractModule, ExtractResult } from '@/features/extract/model/extr
 import { readModelSnapshot } from '@/features/models/hooks/useModels';
 import type { ModelItem } from '@/features/models/model/modelTypes';
 import { callModel } from '@/features/models/services/callModel';
+import { usePersistentState } from '@/shared/hooks/usePersistentState';
 
 type ExtractMode = 'chapter' | 'multi' | 'smart';
 type OutputMode = 'single' | 'book' | 'multi';
@@ -31,6 +32,11 @@ interface ExtractHistoryItem {
 const HISTORY_KEY = 'xinyuexia_extract_history_v1';
 const EXTRACT_MODEL_KEY = 'xinyuexia_extract_selected_model';
 const EXTRACT_PREVIEW_COLLAPSE_KEY = 'xinyuexia_extract_preview_collapsed';
+const EXTRACT_SELECTED_NOVEL_KEY = 'xinyuexia_extract_selected_novel';
+const EXTRACT_MODE_KEY = 'xinyuexia_extract_mode';
+const EXTRACT_OUTPUT_MODE_KEY = 'xinyuexia_extract_output_mode';
+const EXTRACT_BATCH_SIZE_KEY = 'xinyuexia_extract_batch_size';
+const EXTRACT_POINTS_PER_FILE_KEY = 'xinyuexia_extract_points_per_file';
 
 function readEnabledModels() {
   return readModelSnapshot().filter((model) => model.enabled);
@@ -131,15 +137,15 @@ export function ExtractPage() {
   } = useExtractModules();
 
   const [models, setModels] = useState<ModelItem[]>(readEnabledModels);
-  const [selectedModelId, setSelectedModelId] = useState(() => localStorage.getItem(EXTRACT_MODEL_KEY) ?? '');
-  const [selectedNovelId, setSelectedNovelId] = useState<number | null>(novels.find((novel) => novel.type === 'novel')?.id ?? null);
+  const [selectedModelId, setSelectedModelId] = usePersistentState<string>(EXTRACT_MODEL_KEY, '');
+  const [selectedNovelId, setSelectedNovelId] = usePersistentState<number | null>(EXTRACT_SELECTED_NOVEL_KEY, novels.find((novel) => novel.type === 'novel')?.id ?? null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(modules[0]?.id ?? null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
-  const [extractMode, setExtractMode] = useState<ExtractMode>('chapter');
-  const [outputMode, setOutputMode] = useState<OutputMode>('single');
-  const [chaptersPerBatch, setChaptersPerBatch] = useState(3);
-  const [pointsPerFile, setPointsPerFile] = useState(2);
+  const [extractMode, setExtractMode] = usePersistentState<ExtractMode>(EXTRACT_MODE_KEY, 'chapter');
+  const [outputMode, setOutputMode] = usePersistentState<OutputMode>(EXTRACT_OUTPUT_MODE_KEY, 'single');
+  const [chaptersPerBatch, setChaptersPerBatch] = usePersistentState<number>(EXTRACT_BATCH_SIZE_KEY, 3);
+  const [pointsPerFile, setPointsPerFile] = usePersistentState<number>(EXTRACT_POINTS_PER_FILE_KEY, 2);
   const [files, setFiles] = useState<UploadFileItem[]>([]);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [results, setResults] = useState<ExtractResult[]>([]);
@@ -171,10 +177,6 @@ export function ExtractPage() {
   useEffect(() => {
     if (!selectedModelId && models[0]) setSelectedModelId(models[0].id);
   }, [models, selectedModelId]);
-
-  useEffect(() => {
-    if (selectedModelId) localStorage.setItem(EXTRACT_MODEL_KEY, selectedModelId);
-  }, [selectedModelId]);
 
   useEffect(() => {
     localStorage.setItem(EXTRACT_PREVIEW_COLLAPSE_KEY, JSON.stringify(collapsedPreviewIds));
@@ -325,8 +327,8 @@ export function ExtractPage() {
           </div>
         </aside>
 
-        <main className="min-w-0 flex-1 overflow-y-auto px-4 py-4">
-          <div className="grid grid-cols-3 gap-3">
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden px-4 py-4">
+          <div className="grid shrink-0 grid-cols-3 gap-3">
             <section className="rounded-xl border border-gray-200 bg-white p-3">
               <h3 className="mb-2 flex items-center gap-1 text-xs font-bold text-gray-900">
                 <Settings className="h-3.5 w-3.5 text-brand" /> AI 模型
@@ -402,7 +404,7 @@ export function ExtractPage() {
               </div>
             </section>
 
-            <section className="col-span-3 rounded-xl border border-gray-200 bg-white p-4">
+            <section className="col-span-3 flex min-h-0 flex-col rounded-xl border border-gray-200 bg-white p-4">
               <h3 className="mb-3 flex items-center gap-1.5 text-sm font-bold text-gray-900">
                 <FileText className="h-4 w-4 text-brand" /> 上传 TXT 文件
               </h3>
@@ -416,7 +418,7 @@ export function ExtractPage() {
                   setIsDraggingFile(false);
                   void handleFiles(event.dataTransfer.files);
                 }}
-                className={`flex h-[168px] w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-4 transition-all ${isDraggingFile ? 'border-brand bg-brand-light/40' : 'border-gray-200 hover:border-brand hover:bg-brand-light/30'}`}
+                className={`flex h-[188px] w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-4 transition-all ${isDraggingFile ? 'border-brand bg-brand-light/40' : 'border-gray-200 hover:border-brand hover:bg-brand-light/30'}`}
               >
                 <FileText className={`h-8 w-8 ${isDraggingFile ? 'text-brand' : 'text-gray-300'}`} />
                 <span className={`text-sm ${isDraggingFile ? 'font-medium text-brand' : 'text-gray-500'}`}>{isDraggingFile ? '松开上传' : '点击或拖拽 .txt 文件'}</span>
@@ -424,7 +426,7 @@ export function ExtractPage() {
               </div>
 
               {files.length > 0 && (
-                <div className="mt-4">
+                <div className="mt-4 min-h-0 flex-1 overflow-hidden">
                   <div className="mb-1.5 flex items-center justify-between">
                     <span className="text-xs text-gray-600">{files.length} 个文件，{selectedFiles.length} 个待处理</span>
                     <div className="flex gap-2">
@@ -433,7 +435,7 @@ export function ExtractPage() {
                       <button onClick={() => setFiles([])} className="text-[10px] text-red-400 hover:underline">清空</button>
                     </div>
                   </div>
-                  <div className="max-h-[160px] divide-y divide-gray-50 overflow-y-auto rounded-lg border border-gray-100">
+                  <div className="max-h-[220px] divide-y divide-gray-50 overflow-y-auto rounded-lg border border-gray-100">
                     {[...files].reverse().map((file) => (
                       <div key={file.id} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-gray-50">
                         <input type="checkbox" checked={file.selected} onChange={() => setFiles((prev) => prev.map((item) => item.id === file.id ? { ...item, selected: !item.selected } : item))} className="h-3.5 w-3.5 rounded border-gray-300 text-brand focus:ring-brand" />
@@ -448,7 +450,7 @@ export function ExtractPage() {
               )}
             </section>
 
-            <div className="col-span-3 flex items-center justify-between">
+            <div className="col-span-3 mt-3 flex shrink-0 items-center justify-between">
               <span className="rounded-full border border-brand/20 bg-brand-light px-3 py-1 text-xs text-brand">
                 {saveMessage || extractProgress || '准备就绪'}
               </span>
@@ -465,6 +467,30 @@ export function ExtractPage() {
 
         <aside className="w-[420px] shrink-0 border-l border-gray-200 bg-white">
           <div className="h-full overflow-y-auto p-4">
+            {selectedModule && (
+              <section className="mb-4 rounded-xl border border-gray-200 bg-white p-4">
+                <h3 className="mb-3 text-sm font-bold text-gray-900">模块编辑</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-gray-500">模块名称</label>
+                    <input
+                      value={selectedModule.label}
+                      onChange={(event) => updateModule(selectedModule.id, { label: event.target.value })}
+                      className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-gray-500">模块内容</label>
+                    <textarea
+                      value={selectedModule.instruction}
+                      onChange={(event) => updateModule(selectedModule.id, { instruction: event.target.value })}
+                      rows={8}
+                      className="w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm leading-6 outline-none focus:border-brand"
+                    />
+                  </div>
+                </div>
+              </section>
+            )}
             <section className="rounded-xl border border-gray-200 bg-white p-4">
               <h3 className="mb-3 text-sm font-bold text-gray-900">模块预览</h3>
               <div className="space-y-3">

@@ -1,8 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import type { ModelItem, NewModelInput } from '@/features/models/model/modelTypes';
 
 const MODELS_KEY = 'xinyuexia_api_settings_v1';
+const MODELS_MIGRATED_KEY = 'xinyuexia_models_migrated_v1';
+const ACTIVE_MODEL_KEY = 'xinyuexia_active_model_id';
 
 function readModels() {
   try {
@@ -10,11 +12,16 @@ function readModels() {
     if (!raw) return [];
     const parsed = JSON.parse(raw) as { models?: ModelItem[] };
     const models = parsed.models ?? [];
-    const cleaned = models.filter((model) => !['deepseek-v4-flash', 'deepseek-v4-pro'].includes(model.id));
-    if (cleaned.length !== models.length) {
-      writeModels(cleaned);
+    const migrated = localStorage.getItem(MODELS_MIGRATED_KEY) === '1';
+    if (!migrated) {
+      const cleaned = models.filter((model) => !['deepseek-v4-flash', 'deepseek-v4-pro'].includes(model.id));
+      localStorage.setItem(MODELS_MIGRATED_KEY, '1');
+      if (cleaned.length !== models.length) {
+        writeModels(cleaned);
+        return cleaned;
+      }
     }
-    return cleaned;
+    return models;
   } catch {
     return [];
   }
@@ -31,9 +38,20 @@ export function readModelSnapshot() {
 
 export function useModels() {
   const [models, setModels] = useState<ModelItem[]>(readModels);
-  const [activeId, setActiveId] = useState<string | null>(() => readModels()[0]?.id ?? null);
+  const [activeId, setActiveId] = useState<string | null>(() => localStorage.getItem(ACTIVE_MODEL_KEY) || readModels()[0]?.id || null);
 
   const activeModel = useMemo(() => models.find((model) => model.id === activeId) ?? null, [activeId, models]);
+
+  useEffect(() => {
+    const syncModels = () => setModels(readModels());
+    window.addEventListener('xinyuexia_models_updated', syncModels);
+    return () => window.removeEventListener('xinyuexia_models_updated', syncModels);
+  }, []);
+
+  useEffect(() => {
+    if (activeId) localStorage.setItem(ACTIVE_MODEL_KEY, activeId);
+    else localStorage.removeItem(ACTIVE_MODEL_KEY);
+  }, [activeId]);
 
   const persist = (next: ModelItem[]) => {
     setModels(next);

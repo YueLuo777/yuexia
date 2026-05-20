@@ -318,8 +318,15 @@ export function PromptsPage() {
                       编辑
                     </button>
                     <button
-                      onClick={() => setDeleteTarget(prompt)}
-                      className="flex flex-1 items-center justify-center gap-1.5 rounded-2xl bg-red-50 py-3 text-base text-red-500 hover:bg-red-100"
+                      onClick={() => {
+                        if (!prompt.isLocked) setDeleteTarget(prompt);
+                      }}
+                      disabled={prompt.isLocked}
+                      className={`flex flex-1 items-center justify-center gap-1.5 rounded-2xl py-3 text-base ${
+                        prompt.isLocked
+                          ? 'cursor-not-allowed bg-slate-100 text-slate-300'
+                          : 'bg-red-50 text-red-500 hover:bg-red-100'
+                      }`}
                     >
                       <Trash2 className="h-4 w-4" />
                       删除

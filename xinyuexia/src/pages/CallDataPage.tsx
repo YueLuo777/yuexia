@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 
 import { getStatsByModel, type CallRecord, useCallRecords } from '@/hooks/useCallRecords';
 import { ConfirmDialog } from '@/shared/ui/ConfirmDialog';
+import { usePersistentState } from '@/shared/hooks/usePersistentState';
 
 function formatTime(ts: number) {
   const date = new Date(ts);
@@ -25,11 +26,11 @@ type SortDir = 'asc' | 'desc';
 
 export default function CallDataPage() {
   const { records, refresh, clear } = useCallRecords();
-  const [filterType, setFilterType] = useState<'all' | CallRecord['type']>('all');
-  const [filterModel, setFilterModel] = useState('all');
+  const [filterType, setFilterType] = usePersistentState<'all' | CallRecord['type']>('xinyuexia_call_data_filter_type', 'all');
+  const [filterModel, setFilterModel] = usePersistentState<string>('xinyuexia_call_data_filter_model', 'all');
   const [sortField, setSortField] = useState<SortField>('timestamp');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [expandedStats, setExpandedStats] = useState(true);
+  const [expandedStats, setExpandedStats] = usePersistentState<boolean>('xinyuexia_call_data_expanded_stats', true);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   const modelOptions = useMemo(() => {

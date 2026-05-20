@@ -8,6 +8,7 @@ import type { ModelItem } from '@/features/models/model/modelTypes';
 import { callModel } from '@/features/models/services/callModel';
 import { readPromptSnapshot } from '@/features/prompts/hooks/usePrompts';
 import type { PromptItem } from '@/features/prompts/model/promptTypes';
+import { usePersistentState } from '@/shared/hooks/usePersistentState';
 
 type IdeaResult = { title: string; content: string };
 type IdeaHistoryItem = IdeaResult & {

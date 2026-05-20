@@ -26,14 +26,15 @@ declare global {
 }
 
 const APP_SCALE_KEY = 'xinyuexia_app_scale';
+const BASE_APP_SCALE = 1.1;
 
 function loadScale() {
   try {
-    const raw = Number(localStorage.getItem(APP_SCALE_KEY) ?? '1.1');
-    if (!Number.isFinite(raw)) return 1.1;
+    const raw = Number(localStorage.getItem(APP_SCALE_KEY) ?? '1');
+    if (!Number.isFinite(raw)) return 1;
     return Math.max(0.8, Math.min(1.5, raw));
   } catch {
-    return 1.1;
+    return 1;
   }
 }
 
@@ -48,7 +49,7 @@ export function DashboardLayout() {
   const sidebarRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
-    document.body.style.zoom = String(appScale);
+    document.body.style.zoom = String(Number((BASE_APP_SCALE * appScale).toFixed(3)));
     localStorage.setItem(APP_SCALE_KEY, String(appScale));
   }, [appScale]);
 
@@ -96,12 +97,12 @@ export function DashboardLayout() {
 
   return (
     <div className="flex h-screen flex-col bg-slate-50">
-      <header className="flex h-11 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4" style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}>
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-base font-bold text-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500 text-[17px] font-bold text-white">
             月
           </div>
-          <span className="text-base font-bold text-slate-900">月下写作</span>
+          <span className="text-[17px] font-bold text-slate-900">月下写作</span>
         </div>
 
         <div className="flex items-center gap-1.5" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
@@ -110,20 +111,20 @@ export function DashboardLayout() {
             className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
             title="打开作品列表"
           >
-            <Search className="h-5 w-5" />
+            <Search className="h-[18px] w-[18px]" />
           </button>
-          <div className="ml-1 flex items-center rounded-lg border border-slate-200 bg-white">
+          <div className="ml-1 flex items-center rounded-xl border border-slate-200 bg-white">
             <button
               onClick={() => setAppScale((prev) => Math.max(0.8, Number((prev - 0.1).toFixed(1))))}
-              className="px-2 py-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+              className="px-2.5 py-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
               title="缩小 10%"
             >
               <Minus className="h-4 w-4" />
             </button>
-            <span className="min-w-[44px] text-center text-[11px] text-slate-500">{Math.round(appScale * 100)}%</span>
+            <span className="min-w-[48px] text-center text-xs text-slate-500">{Math.round(appScale * 100)}%</span>
             <button
               onClick={() => setAppScale((prev) => Math.min(1.5, Number((prev + 0.1).toFixed(1))))}
-              className="px-2 py-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
+              className="px-2.5 py-2 text-slate-400 hover:bg-slate-50 hover:text-slate-600"
               title="放大 10%"
             >
               <Plus className="h-4 w-4" />
@@ -134,7 +135,7 @@ export function DashboardLayout() {
             className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
             title="最小化"
           >
-            <Minus className="h-4 w-4" />
+          <Minus className="h-4 w-4" />
           </button>
           <button
             onClick={async () => {
@@ -157,7 +158,7 @@ export function DashboardLayout() {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <aside ref={sidebarRef} className="flex w-[180px] shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-slate-200 bg-white">
+        <aside ref={sidebarRef} className="flex w-[198px] shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-slate-200 bg-white">
           {navConfig.filter((group) => !group.hidden).map((group) => {
             const GroupIcon = getIconByName(group.iconName);
             const isCollapsed = collapsedSections[group.title] ?? false;
@@ -166,14 +167,14 @@ export function DashboardLayout() {
               <div key={group.title} className="mb-1">
                 <button
                   onClick={() => toggleSection(group.title)}
-                  className="mx-1 mt-1 flex w-[calc(100%-8px)] items-center justify-between rounded-md bg-brand-light px-3 py-1.5 font-medium text-brand-dark transition-colors hover:bg-brand/10"
-                  style={{ fontSize: '12px' }}
+                  className="mx-1.5 mt-1.5 flex w-[calc(100%-12px)] items-center justify-between rounded-lg bg-brand-light px-3.5 py-2 font-medium text-brand-dark transition-colors hover:bg-brand/10"
+                  style={{ fontSize: '13px' }}
                 >
                   <span className="flex items-center gap-1.5">
-                    <GroupIcon className="h-3.5 w-3.5" />
+                    <GroupIcon className="h-4 w-4" />
                     <span>{group.title}</span>
                   </span>
-                  {isCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </button>
 
                 {!isCollapsed && group.items.filter((item) => !item.hidden).map((item) => {
@@ -184,14 +185,14 @@ export function DashboardLayout() {
                     <Link
                       key={item.to}
                       to={item.to}
-                      className={`flex items-center gap-2.5 px-4 py-2 transition-colors ${
+                      className={`flex items-center gap-3 px-4 py-2.5 transition-colors ${
                         isActive
                           ? 'border-l-[3px] border-orange-500 bg-orange-50 font-medium text-orange-500'
                           : 'border-l-[3px] border-transparent text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                       }`}
                     >
-                      <ItemIcon className="h-4 w-4" />
-                      <span className="text-sm">{item.label}</span>
+                      <ItemIcon className="h-[17px] w-[17px]" />
+                      <span className="text-[15px] leading-none">{item.label}</span>
                     </Link>
                   );
                 })}
@@ -202,7 +203,7 @@ export function DashboardLayout() {
           <div className="mt-auto border-t border-slate-100 p-4">
             <button
               onClick={() => setShowNavSettings(true)}
-              className="flex w-full items-center justify-center whitespace-nowrap rounded-md bg-brand px-3 py-2 text-xs text-white transition-colors hover:bg-brand-dark"
+              className="flex w-full items-center justify-center whitespace-nowrap rounded-lg bg-brand px-3 py-2.5 text-[13px] text-white transition-colors hover:bg-brand-dark"
             >
               导航设置
             </button>
