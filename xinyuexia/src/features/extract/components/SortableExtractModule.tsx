@@ -1,4 +1,4 @@
-import { Check, GripVertical, Layers, Lock, Unlock } from 'lucide-react';
+import { Check, Layers, Lock, Unlock } from 'lucide-react';
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 
 import type { ExtractModule } from '@/features/extract/model/extractTypes';
@@ -52,24 +52,22 @@ export function SortableExtractModule({
     setIsArmedDrag(false);
   };
 
-  const handlePointerDown = (event: ReactPointerEvent) => {
+  const handleLabelPointerDown = (event: ReactPointerEvent) => {
     pressStartRef.current = { x: event.clientX, y: event.clientY };
     clearPressTimer();
     pressTimerRef.current = window.setTimeout(() => {
       setIsArmedDrag(true);
-    }, 180);
+    }, 120);
   };
 
-  const handlePointerMove = (event: ReactPointerEvent) => {
+  const handleLabelPointerMove = (event: ReactPointerEvent) => {
     if (nativeDraggingRef.current || isArmedDrag) return;
     const deltaX = Math.abs(event.clientX - pressStartRef.current.x);
     const deltaY = Math.abs(event.clientY - pressStartRef.current.y);
-    if (deltaX > 6 || deltaY > 6) {
-      clearPressTimer();
-    }
+    if (deltaX > 5 || deltaY > 5) clearPressTimer();
   };
 
-  const handlePointerUp = () => {
+  const handleLabelPointerUp = () => {
     if (!nativeDraggingRef.current) resetDragState();
     else clearPressTimer();
   };
@@ -90,30 +88,9 @@ export function SortableExtractModule({
     >
       <div className={`flex items-center text-left transition-colors ${isSelected ? 'bg-brand-light/70' : 'hover:bg-gray-50'}`}>
         <button
-          draggable={isArmedDrag}
-          onPointerDown={handlePointerDown}
-          onPointerMove={handlePointerMove}
-          onPointerUp={handlePointerUp}
-          onPointerCancel={resetDragState}
-          onDragStart={(event) => {
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/plain', module.id);
-            nativeDraggingRef.current = true;
-            onDragStart(module.id);
-          }}
-          onDragEnd={() => {
-            resetDragState();
-            onDragEnd();
-          }}
-          className={`flex w-6 self-stretch cursor-grab items-center justify-center rounded-l active:cursor-grabbing hover:bg-gray-200/60 ${
-            isArmedDrag ? 'bg-brand/10' : ''
-          }`}
-          title="长按后拖拽排序"
+          onClick={() => onSelect(module.id)}
+          className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-2 text-left"
         >
-          <GripVertical className={`h-3.5 w-3.5 ${isArmedDrag ? 'text-brand' : 'text-gray-300'}`} />
-        </button>
-
-        <button onClick={() => onSelect(module.id)} className="flex min-w-0 flex-1 items-center gap-1.5 py-2 pr-2 text-left">
           <span
             onClick={(event) => {
               event.stopPropagation();
@@ -126,7 +103,29 @@ export function SortableExtractModule({
             {module.active && <Check className="h-2.5 w-2.5 text-white" strokeWidth={3} />}
           </span>
           <Layers className={`h-3.5 w-3.5 shrink-0 ${isSystem ? 'text-amber-500' : module.active ? 'text-brand' : 'text-gray-400'}`} />
-          <span className={`truncate text-xs ${isSelected ? 'font-medium text-brand' : 'text-gray-700'}`}>{module.label}</span>
+          <span
+            draggable={isArmedDrag}
+            onPointerDown={handleLabelPointerDown}
+            onPointerMove={handleLabelPointerMove}
+            onPointerUp={handleLabelPointerUp}
+            onPointerCancel={resetDragState}
+            onDragStart={(event) => {
+              event.stopPropagation();
+              event.dataTransfer.effectAllowed = 'move';
+              event.dataTransfer.setData('text/plain', module.id);
+              nativeDraggingRef.current = true;
+              onDragStart(module.id);
+            }}
+            onDragEnd={(event) => {
+              event.stopPropagation();
+              resetDragState();
+              onDragEnd();
+            }}
+            className={`min-w-0 flex-1 truncate text-xs ${isSelected ? 'font-medium text-brand' : 'text-gray-700'} ${isArmedDrag ? 'cursor-grab' : ''}`}
+            title="长按模块名后拖拽排序"
+          >
+            {module.label}
+          </span>
           <span className={`rounded-full px-1.5 py-0.5 text-[10px] ${isSystem ? 'bg-amber-50 text-amber-600' : 'bg-sky-50 text-sky-600'}`}>
             {isSystem ? '系统' : '输出'}
           </span>

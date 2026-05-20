@@ -29,6 +29,8 @@ interface ExtractHistoryItem {
 }
 
 const HISTORY_KEY = 'xinyuexia_extract_history_v1';
+const EXTRACT_MODEL_KEY = 'xinyuexia_extract_selected_model';
+const EXTRACT_PREVIEW_COLLAPSE_KEY = 'xinyuexia_extract_preview_collapsed';
 
 function readEnabledModels() {
   return readModelSnapshot().filter((model) => model.enabled);
@@ -129,7 +131,7 @@ export function ExtractPage() {
   } = useExtractModules();
 
   const [models, setModels] = useState<ModelItem[]>(readEnabledModels);
-  const [selectedModelId, setSelectedModelId] = useState('');
+  const [selectedModelId, setSelectedModelId] = useState(() => localStorage.getItem(EXTRACT_MODEL_KEY) ?? '');
   const [selectedNovelId, setSelectedNovelId] = useState<number | null>(novels.find((novel) => novel.type === 'novel')?.id ?? null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(modules[0]?.id ?? null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -150,7 +152,13 @@ export function ExtractPage() {
   const [extractProgress, setExtractProgress] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
-  const [collapsedPreviewIds, setCollapsedPreviewIds] = useState<Record<string, boolean>>({});
+  const [collapsedPreviewIds, setCollapsedPreviewIds] = useState<Record<string, boolean>>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(EXTRACT_PREVIEW_COLLAPSE_KEY) ?? '{}') as Record<string, boolean>;
+    } catch {
+      return {};
+    }
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fileImportRef = useRef<HTMLInputElement>(null);
 
@@ -163,6 +171,14 @@ export function ExtractPage() {
   useEffect(() => {
     if (!selectedModelId && models[0]) setSelectedModelId(models[0].id);
   }, [models, selectedModelId]);
+
+  useEffect(() => {
+    if (selectedModelId) localStorage.setItem(EXTRACT_MODEL_KEY, selectedModelId);
+  }, [selectedModelId]);
+
+  useEffect(() => {
+    localStorage.setItem(EXTRACT_PREVIEW_COLLAPSE_KEY, JSON.stringify(collapsedPreviewIds));
+  }, [collapsedPreviewIds]);
 
   useEffect(() => {
     if (!selectedModuleId && modules[0]) setSelectedModuleId(modules[0].id);

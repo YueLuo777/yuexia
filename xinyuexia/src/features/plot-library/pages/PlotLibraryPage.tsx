@@ -30,11 +30,11 @@ export function PlotLibraryPage() {
   const filteredItems = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     const result = items.filter((item) => {
-      const matchKeyword = !keyword ||
-        item.title.toLowerCase().includes(keyword) ||
-        item.chapter.toLowerCase().includes(keyword) ||
-        item.novelTitle.toLowerCase().includes(keyword) ||
-        item.content.toLowerCase().includes(keyword);
+      const matchKeyword = !keyword
+        || item.title.toLowerCase().includes(keyword)
+        || item.chapter.toLowerCase().includes(keyword)
+        || item.novelTitle.toLowerCase().includes(keyword)
+        || item.content.toLowerCase().includes(keyword);
       const matchTag = !activeTag || item.tags.includes(activeTag);
       return matchKeyword && matchTag;
     });
@@ -60,21 +60,22 @@ export function PlotLibraryPage() {
   };
 
   return (
-    <div className="flex h-full flex-col bg-gray-50">
-      <div className="shrink-0 border-b border-gray-200 bg-white px-4 py-2.5">
+    <div className="h-full flex flex-col bg-gray-50">
+      <div className="px-4 py-2.5 bg-white border-b border-gray-200 shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Library className="h-5 w-5 text-brand" />
+            <Library className="w-5 h-5 text-brand" />
             <div>
               <h1 className="text-base font-bold text-gray-900">剧情库</h1>
               <p className="text-[10px] text-gray-400">
-                共 {items.length} 条剧情点{activeTag ? ` · 筛选「${activeTag}」${filteredItems.length} 条` : ''}
+                共 {items.length} 条剧情点
+                {activeTag ? ` · 筛选“${activeTag}” ${filteredItems.length} 条` : ''}
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <label className="relative w-48">
-              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+            <div className="relative w-48">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
               <input
                 value={search}
                 onChange={(event) => setSearch(event.target.value)}
@@ -83,16 +84,16 @@ export function PlotLibraryPage() {
               />
               {search && (
                 <button onClick={() => setSearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                  <X className="h-3 w-3" />
+                  <X className="w-3 h-3" />
                 </button>
               )}
-            </label>
+            </div>
             <div className="flex items-center gap-1">
-              <ArrowUpDown className="h-3.5 w-3.5 text-gray-400" />
+              <ArrowUpDown className="w-3.5 h-3.5 text-gray-400" />
               <select
                 value={sortMode}
                 onChange={(event) => setSortMode(event.target.value as SortMode)}
-                className="rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs outline-none focus:border-brand"
+                className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:border-brand bg-white"
               >
                 <option value="time">最新</option>
                 <option value="wordCount-desc">字数高</option>
@@ -102,83 +103,88 @@ export function PlotLibraryPage() {
             {items.length > 0 && (
               <button
                 onClick={() => setShowClearConfirm(true)}
-                className="flex items-center gap-1 rounded-lg bg-red-50 px-3 py-1.5 text-[11px] text-red-600 transition-colors hover:bg-red-100"
+                className="flex items-center gap-1 px-3 py-1.5 text-[11px] text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
               >
-                <Trash2 className="h-3 w-3" />
-                清空
+                <Trash2 className="w-3 h-3" /> 清空
               </button>
             )}
           </div>
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="flex w-[180px] shrink-0 flex-col overflow-hidden border-r border-gray-200 bg-white">
-          <div className="flex items-center gap-2 border-b border-gray-100 px-3 py-2.5">
-            <Tag className="h-3.5 w-3.5 text-gray-500" />
+      <div className="flex-1 flex min-h-0 overflow-hidden">
+        <div className="w-[180px] shrink-0 bg-white border-r border-gray-200 flex flex-col overflow-hidden">
+          <div className="px-3 py-2.5 border-b border-gray-100 flex items-center gap-2">
+            <Tag className="w-3.5 h-3.5 text-gray-500" />
             <span className="text-xs font-bold text-gray-700">标签筛选</span>
-            <span className="ml-auto text-[10px] text-gray-400">{tags.length} 个</span>
+            <span className="text-[10px] text-gray-400 ml-auto">{tags.length} 个</span>
           </div>
-          <div className="flex-1 overflow-y-auto p-2">
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
             <button
               onClick={() => setActiveTag(null)}
-              className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors ${
-                activeTag === null ? 'bg-brand-light text-brand' : 'text-gray-600 hover:bg-gray-50'
+              className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between ${
+                activeTag === null ? 'bg-brand text-white' : 'hover:bg-gray-50 text-gray-700'
               }`}
             >
-              <span>全部剧情点</span>
-              <span>{items.length}</span>
+              <span className="text-xs font-medium">全部</span>
+              <span className={`text-[10px] ${activeTag === null ? 'text-white/80' : 'text-gray-400'}`}>{items.length}</span>
             </button>
-            {tags.map((tag) => (
+            {tags.map(({ tag, count }) => (
               <button
-                key={tag.tag}
-                onClick={() => setActiveTag(tag.tag)}
-                className={`mb-1 flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors ${
-                  activeTag === tag.tag ? 'bg-brand-light text-brand' : 'text-gray-600 hover:bg-gray-50'
+                key={tag}
+                onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between ${
+                  activeTag === tag ? 'bg-brand text-white' : 'hover:bg-gray-50 text-gray-700'
                 }`}
               >
-                <span className="truncate">#{tag.tag}</span>
-                <span>{tag.count}</span>
+                <span className="text-xs truncate flex-1 min-w-0">{tag}</span>
+                <span className={`text-[10px] shrink-0 ml-1 ${activeTag === tag ? 'text-white/80' : 'text-gray-400'}`}>{count}</span>
               </button>
             ))}
+            {tags.length === 0 && <div className="text-center py-6 text-gray-300 text-xs">暂无标签</div>}
           </div>
-        </aside>
+        </div>
 
-        <main className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4">
           {filteredItems.length === 0 ? (
-            <div className="flex h-full min-h-[360px] flex-col items-center justify-center rounded-xl border border-dashed border-gray-200 bg-white">
-              <Star className="mb-3 h-10 w-10 text-gray-300" />
-              <p className="text-sm text-gray-500">{items.length === 0 ? '剧情库为空' : '没有匹配的剧情点'}</p>
-              <p className="mt-1 text-xs text-gray-400">可从“提炼剧情”页面保存结果到这里</p>
+            <div className="h-full flex flex-col items-center justify-center text-gray-300">
+              <Library className="w-12 h-12 mb-2" />
+              <p className="text-sm">{items.length === 0 ? '剧情库为空，在提炼页面导入' : '没有匹配的剧情点'}</p>
             </div>
           ) : (
-            <div className="grid gap-3 lg:grid-cols-2 2xl:grid-cols-3">
-              {filteredItems.map((item) => (
-                <article key={item.id} className="flex min-h-[180px] flex-col rounded-xl border border-gray-100 bg-white p-4 shadow-sm transition-shadow hover:shadow-md">
-                  <div className="mb-2 flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h2 className="truncate text-sm font-bold text-gray-900">{item.title}</h2>
-                      <p className="mt-1 text-[11px] text-gray-400">{item.novelTitle} · {item.chapter} · {formatTime(item.createdAt)}</p>
+            <div className="grid grid-cols-5 gap-3">
+              {filteredItems.filter((item) => item.content.trim().length > 0).map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => setDetail(item)}
+                  className="text-left bg-white rounded-lg border border-gray-200 hover:border-brand hover:shadow-md transition-all group flex flex-col min-h-[150px]"
+                >
+                  <div className="p-3 flex-1">
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h2 className="truncate text-sm font-bold text-gray-900">{item.title}</h2>
+                        <p className="mt-1 text-[10px] text-gray-400">{item.chapter} · {formatTime(item.createdAt)}</p>
+                      </div>
+                      <span className="rounded-full bg-gray-50 px-2 py-0.5 text-[10px] text-gray-400">{item.wordCount} 字</span>
                     </div>
-                    <span className="rounded-full bg-gray-50 px-2 py-0.5 text-[10px] text-gray-400">{item.wordCount} 字</span>
+                    <p className="line-clamp-5 text-xs leading-6 text-gray-600">{item.content}</p>
                   </div>
-                  <p className="line-clamp-5 flex-1 whitespace-pre-wrap text-xs leading-6 text-gray-600">{item.content}</p>
-                  <div className="mt-3 flex items-center justify-between gap-2">
+                  <div className="px-3 pb-3 flex items-center justify-between gap-2">
                     <div className="flex min-w-0 flex-wrap gap-1">
                       {item.tags.slice(0, 4).map((tag) => (
                         <span key={tag} className="rounded-full bg-brand-light px-2 py-0.5 text-[10px] text-brand">#{tag}</span>
                       ))}
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
-                      <button onClick={() => setDetail(item)} className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50">查看</button>
-                      <button onClick={() => deleteItem(item.id)} className="rounded-md bg-red-50 px-2 py-1 text-xs text-red-500 hover:bg-red-100">删除</button>
+                      <button onClick={(event) => { event.stopPropagation(); setDetail(item); }} className="rounded-md border border-gray-200 px-2 py-1 text-xs text-gray-600 hover:bg-gray-50">查看</button>
+                      <button onClick={(event) => { event.stopPropagation(); deleteItem(item.id); }} className="rounded-md bg-red-50 px-2 py-1 text-xs text-red-500 hover:bg-red-100">删除</button>
                     </div>
                   </div>
-                </article>
+                </button>
               ))}
             </div>
           )}
-        </main>
+        </div>
       </div>
 
       {detail && (

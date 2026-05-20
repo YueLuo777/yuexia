@@ -81,9 +81,7 @@ export function NavSettingsModal({ isOpen, onClose, config, onSave, onReset }: N
     const [moved] = srcItems.splice(dragSrc.itemIdx, 1);
     const tgtItems = next[targetGroupIdx].items;
     let insertIdx = dragOver?.pos === 'after' ? targetItemIdx + 1 : targetItemIdx;
-    if (dragSrc.groupIdx === targetGroupIdx && dragSrc.itemIdx < targetItemIdx) {
-      insertIdx -= 1;
-    }
+    if (dragSrc.groupIdx === targetGroupIdx && dragSrc.itemIdx < targetItemIdx) insertIdx -= 1;
     insertIdx = Math.max(0, Math.min(insertIdx, tgtItems.length));
     tgtItems.splice(insertIdx, 0, moved);
     saveDraft(next);
@@ -122,9 +120,7 @@ export function NavSettingsModal({ isOpen, onClose, config, onSave, onReset }: N
                 value={editingGroupValue}
                 onChange={(event) => setEditingGroupValue(event.target.value)}
                 onBlur={commitGroupTitle}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') commitGroupTitle();
-                }}
+                onKeyDown={(event) => { if (event.key === 'Enter') commitGroupTitle(); }}
                 className="w-full rounded border border-brand/30 px-1 py-0.5 text-xs font-bold text-gray-700 outline-none focus:ring-1 focus:ring-brand/20"
               />
             ) : (
@@ -185,7 +181,6 @@ export function NavSettingsModal({ isOpen, onClose, config, onSave, onReset }: N
                         : 'border-transparent bg-gray-50/50 hover:border-gray-200 hover:bg-gray-50'
                   }`}
                 >
-                  <span className={`shrink-0 text-gray-400 ${isHidden ? 'opacity-40' : ''}`}>⋯⋯</span>
                   <ItemIcon className={`h-3 w-3 shrink-0 ${isHidden ? 'text-gray-300' : 'text-gray-400'}`} />
                   {isEditing ? (
                     <input
@@ -270,9 +265,7 @@ export function NavSettingsModal({ isOpen, onClose, config, onSave, onReset }: N
                   autoFocus
                   value={newGroupTitle}
                   onChange={(event) => setNewGroupTitle(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') handleAddGroup();
-                  }}
+                  onKeyDown={(event) => { if (event.key === 'Enter') handleAddGroup(); }}
                   placeholder="输入专区名称"
                   className="flex-1 rounded border border-gray-200 px-2 py-1.5 text-xs outline-none focus:border-brand"
                 />

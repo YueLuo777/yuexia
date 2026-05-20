@@ -33,11 +33,8 @@ export function useModels() {
   const persist = (next: ModelItem[]) => {
     setModels(next);
     writeModels(next);
-    if (next.length === 0) {
-      setActiveId(null);
-    } else if (!next.some((model) => model.id === activeId)) {
-      setActiveId(next[0].id);
-    }
+    if (next.length === 0) setActiveId(null);
+    else if (!next.some((model) => model.id === activeId)) setActiveId(next[0].id);
   };
 
   const addModel = (input: NewModelInput) => {
@@ -50,6 +47,8 @@ export function useModels() {
       apiKey: input.apiKey.trim(),
       model: id,
       enabled: true,
+      locked: false,
+      connectionStatus: 'unknown',
     };
     persist([...models, model]);
     setActiveId(model.id);
@@ -57,11 +56,19 @@ export function useModels() {
   };
 
   const updateModel = (id: string, updates: Partial<ModelItem>) => {
-    persist(models.map((model) => model.id === id ? { ...model, ...updates } : model));
+    persist(models.map((model) => (model.id === id ? { ...model, ...updates } : model)));
   };
 
   const deleteModel = (id: string) => {
     persist(models.filter((model) => model.id !== id));
+  };
+
+  const reorderModels = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 || from >= models.length || to >= models.length) return;
+    const next = [...models];
+    const [moved] = next.splice(from, 1);
+    next.splice(to, 0, moved);
+    persist(next);
   };
 
   return {
@@ -72,5 +79,6 @@ export function useModels() {
     addModel,
     updateModel,
     deleteModel,
+    reorderModels,
   };
 }

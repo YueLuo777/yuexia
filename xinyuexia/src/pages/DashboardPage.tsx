@@ -274,7 +274,7 @@ export function DashboardPage() {
 
     return (
       <section key={id} className="rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
-        <div className="grid gap-3 sm:grid-cols-4">
+        <div className="space-y-3">
           {[
             ['小说', stats.novelCount],
             ['剧本', stats.scriptCount],
@@ -319,14 +319,17 @@ export function DashboardPage() {
       )}
 
       <div className="grid gap-5 xl:grid-cols-3">
-        {visibleSections.filter((section) => section.id !== 'stats').map((section) => renderSection(section.id))}
-      </div>
-
-      {visibleSections.some((section) => section.id === 'stats') && (
-        <div className="mt-5">
-          {renderSection('stats')}
+        <div className="space-y-5">
+          {visibleSections.some((section) => section.id === 'welcome') && renderSection('welcome')}
+          {visibleSections.some((section) => section.id === 'recent') && renderSection('recent')}
         </div>
-      )}
+        <div className="space-y-5">
+          {visibleSections.some((section) => section.id === 'backup') && renderSection('backup')}
+        </div>
+        <div className="space-y-5">
+          {visibleSections.some((section) => section.id === 'stats') && renderSection('stats')}
+        </div>
+      </div>
 
       <NewNovelModal
         isOpen={isNewOpen}

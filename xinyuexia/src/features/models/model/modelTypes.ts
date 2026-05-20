@@ -5,6 +5,8 @@ export interface ModelItem {
   baseUrl: string;
   apiKey: string;
   model: string;
+  locked?: boolean;
+  connectionStatus?: 'unknown' | 'connected' | 'failed' | 'testing';
 }
 
 export interface NewModelInput {

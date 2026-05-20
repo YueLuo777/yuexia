@@ -47,6 +47,7 @@
     min-width: 320px;
     min-height: 100vh;
     font-family: "PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", system-ui, -apple-system, sans-serif;
+    zoom: 1.1;
   }
 
   button,
