@@ -1,62 +1,67 @@
-import { Download, Play, RotateCcw, Settings, Sparkles, Upload } from 'lucide-react';
+import { BookMarked, Download, FileText, Play, RotateCcw, Settings, Sparkles, Upload, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-import { ChapterSelectPanel } from '@/features/extract/components/ChapterSelectPanel';
 import { ExtractDropZone } from '@/features/extract/components/ExtractDropZone';
 import { useExtractModules } from '@/features/extract/hooks/useExtractModules';
 import { useExtractNovels } from '@/features/extract/hooks/useExtractNovels';
-import type { ExtractChapter, ExtractResult, ExtractZone } from '@/features/extract/model/extractTypes';
+import type { ExtractModule, ExtractResult, ExtractZone } from '@/features/extract/model/extractTypes';
 import { readModelSnapshot } from '@/features/models/hooks/useModels';
 import type { ModelItem } from '@/features/models/model/modelTypes';
 import { callModel } from '@/features/models/services/callModel';
-import { savePlotItems } from '@/features/plot-library/hooks/usePlotLibrary';
-import { addWorkbenchLibraryEntry } from '@/features/workbench/model/workbenchLibraryStorage';
 
-type ResultAction = 'plot' | 'setting' | 'outline';
+type ExtractMode = 'chapter' | 'multi' | 'smart';
+type OutputMode = 'single' | 'book' | 'multi';
+
+interface UploadFileItem {
+  id: string;
+  name: string;
+  content: string;
+  selected: boolean;
+}
+
+interface ExtractHistoryItem {
+  id: string;
+  timestamp: number;
+  fileNames: string[];
+  extractModeLabel: string;
+  resultCount: number;
+}
+
+const HISTORY_KEY = 'xinyuexia_extract_history_v1';
 
 function readEnabledModels() {
   return readModelSnapshot().filter((model) => model.enabled);
 }
 
-function createExcerpt(content: string) {
-  const normalized = content.replace(/\s+/g, ' ').trim();
-  if (!normalized) return '暂无正文，建议先在工作台补充章节内容。';
-  return normalized.length > 180 ? `${normalized.slice(0, 180)}...` : normalized;
+function readHistory(): ExtractHistoryItem[] {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    return raw ? (JSON.parse(raw) as ExtractHistoryItem[]) : [];
+  } catch {
+    return [];
+  }
 }
 
-function buildSystemPrompt(modules: { label: string; instruction: string }[]) {
-  return modules
-    .map((module) => `【${module.label}】\n${module.instruction.trim()}`)
-    .filter(Boolean)
-    .join('\n\n');
+function writeHistory(history: ExtractHistoryItem[]) {
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, 20)));
 }
 
-function buildExtractRequest(chapter: ExtractChapter, modules: { label: string; instruction: string }[]) {
-  const moduleText = modules
-    .map((module) => `【${module.label}】\n${module.instruction.trim()}`)
-    .join('\n\n');
+function buildSystemPrompt(modules: ExtractModule[]) {
+  return modules.map((module) => `【${module.label}】\n${module.instruction.trim()}`).join('\n\n');
+}
 
+function buildExtractRequest(file: UploadFileItem, modules: ExtractModule[]) {
   return [
-    '请提炼以下章节的剧情信息。',
-    `章节：第${chapter.serialNumber}章 ${chapter.title || '未命名章节'}`,
+    '请阅读以下章节正文，并按要求输出提炼结果。',
+    `文件名：${file.name}`,
     '',
-    '【输出要求】',
-    moduleText,
+    '【提炼模块】',
+    ...modules.map((module) => `【${module.label}】\n${module.instruction.trim()}`),
     '',
-    '【章节正文】',
-    chapter.content.trim() || '暂无正文。',
+    '【正文】',
+    file.content.trim() || '暂无正文',
   ].join('\n');
-}
-
-function buildLocalPreview(chapter: ExtractChapter, modules: { label: string; instruction: string }[]) {
-  return modules
-    .map((module) => `【${module.label}】\n${module.instruction}\n章节摘要：${createExcerpt(chapter.content)}`)
-    .join('\n\n');
-}
-
-function buildResultTitle(chapter: ExtractChapter) {
-  return `第${chapter.serialNumber}章 ${chapter.title || '未命名章节'}`;
 }
 
 function downloadText(filename: string, text: string) {
@@ -67,6 +72,52 @@ function downloadText(filename: string, text: string) {
   link.download = filename;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function LinkNovelModal({
+  isOpen,
+  novels,
+  selectedNovelId,
+  onSelect,
+  onClose,
+}: {
+  isOpen: boolean;
+  novels: ReturnType<typeof useExtractNovels>;
+  selectedNovelId: number | null;
+  onSelect: (id: number) => void;
+  onClose: () => void;
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div className="flex max-h-[70vh] w-[520px] flex-col overflow-hidden rounded-xl bg-white shadow-2xl" onClick={(event) => event.stopPropagation()}>
+        <div className="border-b border-gray-100 px-5 py-4">
+          <h3 className="text-base font-bold text-gray-900">关联小说</h3>
+          <p className="mt-1 text-xs text-gray-400">选择当前提炼任务要关联的小说。</p>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="space-y-2">
+            {novels.filter((novel) => novel.type === 'novel').map((novel) => (
+              <button
+                key={novel.id}
+                onClick={() => {
+                  onSelect(novel.id);
+                  onClose();
+                }}
+                className={`w-full rounded-lg border px-4 py-3 text-left transition-colors ${
+                  selectedNovelId === novel.id ? 'border-brand bg-brand-light/50' : 'border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <div className="text-sm font-medium text-gray-800">{novel.title}</div>
+                <div className="mt-1 text-[11px] text-gray-400">{novel.chapters.length} 章</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export function ExtractPage() {
@@ -87,23 +138,29 @@ export function ExtractPage() {
 
   const [models, setModels] = useState<ModelItem[]>(readEnabledModels);
   const [selectedModelId, setSelectedModelId] = useState('');
-  const [selectedNovelId, setSelectedNovelId] = useState<number | null>(null);
-  const [selectedChapterIds, setSelectedChapterIds] = useState<Set<number>>(new Set());
+  const [selectedNovelId, setSelectedNovelId] = useState<number | null>(novels.find((novel) => novel.type === 'novel')?.id ?? null);
   const [selectedModuleId, setSelectedModuleId] = useState<string | null>(modules[0]?.id ?? null);
   const [activeDragId, setActiveDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [dragOverZone, setDragOverZone] = useState<ExtractZone | null>(null);
+  const [extractMode, setExtractMode] = useState<ExtractMode>('chapter');
+  const [outputMode, setOutputMode] = useState<OutputMode>('single');
+  const [chaptersPerBatch, setChaptersPerBatch] = useState(3);
+  const [pointsPerFile, setPointsPerFile] = useState(2);
+  const [files, setFiles] = useState<UploadFileItem[]>([]);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [results, setResults] = useState<ExtractResult[]>([]);
-  const [saveMessage, setSaveMessage] = useState('');
-  const [isExtracting, setIsExtracting] = useState(false);
+  const [history, setHistory] = useState<ExtractHistoryItem[]>(readHistory);
+  const [showHistory, setShowHistory] = useState(false);
+  const [showImportConfig, setShowImportConfig] = useState(false);
+  const [showLinkNovel, setShowLinkNovel] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [importMessage, setImportMessage] = useState('');
   const [extractProgress, setExtractProgress] = useState('');
-  const importInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (selectedNovelId === null && novels.length > 0) {
-      setSelectedNovelId(novels[0].id);
-    }
-  }, [novels, selectedNovelId]);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileImportRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const syncModels = () => setModels(readEnabledModels());
@@ -123,45 +180,14 @@ export function ExtractPage() {
     }
   }, [modules, selectedModuleId]);
 
-  const selectedNovel = novels.find((novel) => novel.id === selectedNovelId) ?? novels[0] ?? null;
-  const selectedModule = modules.find((module) => module.id === selectedModuleId) ?? modules[0] ?? null;
-  const selectedModel = models.find((model) => model.id === selectedModelId) ?? models[0] ?? null;
+  const selectedModel = models.find((model) => model.id === selectedModelId) ?? null;
+  const selectedNovel = novels.find((novel) => novel.id === selectedNovelId) ?? null;
+  const selectedModule = modules.find((module) => module.id === selectedModuleId) ?? null;
+  const activeSystemModules = activeModules.filter((module) => module.zone === 'system');
+  const activeOutputModules = activeModules.filter((module) => module.zone === 'output');
+  const selectedFiles = files.filter((file) => file.selected);
 
-  const selectedChapters = useMemo<ExtractChapter[]>(() => {
-    if (!selectedNovel) return [];
-    return selectedNovel.chapters.filter((chapter) => selectedChapterIds.has(chapter.id));
-  }, [selectedChapterIds, selectedNovel]);
-
-  const activeSystemModules = useMemo(() => activeModules.filter((module) => module.zone === 'system'), [activeModules]);
-  const activeOutputModules = useMemo(() => activeModules.filter((module) => module.zone === 'output'), [activeModules]);
-  const canExtract = selectedChapters.length > 0 && activeOutputModules.length > 0 && !isExtracting;
-
-  const handleSelectNovel = (id: number) => {
-    setSelectedNovelId(id);
-    setSelectedChapterIds(new Set());
-    setResults([]);
-    setSaveMessage('');
-    setExtractProgress('');
-  };
-
-  const handleToggleChapter = (id: number) => {
-    setSelectedChapterIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const handleSelectFirst = (count: number) => {
-    if (!selectedNovel) return;
-    setSelectedChapterIds(new Set(selectedNovel.chapters.slice(0, count).map((chapter) => chapter.id)));
-  };
-
-  const handleSelectAll = () => {
-    if (!selectedNovel) return;
-    setSelectedChapterIds(new Set(selectedNovel.chapters.map((chapter) => chapter.id)));
-  };
+  const canExtract = Boolean(selectedModel && selectedFiles.length > 0 && activeOutputModules.length > 0 && !isExtracting);
 
   const resetDragState = () => {
     setActiveDragId(null);
@@ -176,203 +202,137 @@ export function ExtractPage() {
     resetDragState();
   };
 
-  const handleExportModules = () => {
-    const blob = new Blob([exportExtractConfig()], { type: 'application/json;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'xinyuexia-extract-modules.json';
-    link.click();
-    URL.revokeObjectURL(url);
-    setSaveMessage('模块配置已导出');
-  };
-
-  const handleImportModules = async (file?: File | null) => {
-    if (!file) return;
-    const text = await file.text();
-    const result = importExtractConfig(text);
-    setSaveMessage(result.message);
+  const handleFiles = async (fileList: FileList | File[]) => {
+    const nextFiles: UploadFileItem[] = [];
+    for (const file of Array.from(fileList)) {
+      if (!file.name.toLowerCase().endsWith('.txt')) continue;
+      const content = await file.text();
+      nextFiles.push({
+        id: `${file.name}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name: file.name,
+        content,
+        selected: true,
+      });
+    }
+    if (nextFiles.length > 0) {
+      setFiles((prev) => [...prev, ...nextFiles]);
+    }
   };
 
   const handleExtract = async () => {
-    if (!canExtract) return;
+    if (!selectedModel) {
+      setSaveMessage('请先在“模型管理”中配置并启用 AI 模型');
+      return;
+    }
+    if (selectedFiles.length === 0 || activeOutputModules.length === 0 || isExtracting) return;
 
     setIsExtracting(true);
     setResults([]);
     setSaveMessage('');
-    setExtractProgress(selectedModel ? '准备调用模型...' : '未配置模型，生成本地预览...');
 
     const systemPrompt = buildSystemPrompt(activeSystemModules);
     const nextResults: ExtractResult[] = [];
 
-    for (let index = 0; index < selectedChapters.length; index += 1) {
-      const chapter = selectedChapters[index];
-      const chapterTitle = buildResultTitle(chapter);
-      setExtractProgress(`正在处理 ${index + 1}/${selectedChapters.length}：${chapterTitle}`);
-
-      let content = '';
-      if (!selectedModel) {
-        content = buildLocalPreview(chapter, activeOutputModules);
-      } else {
-        try {
-          content = await callModel({
-            model: selectedModel,
-            prompt: systemPrompt,
-            userContent: buildExtractRequest(chapter, activeOutputModules),
-          });
-        } catch (error) {
-          content = error instanceof Error ? `【错误】${error.message}` : '【错误】模型请求失败。';
-        }
+    for (let index = 0; index < selectedFiles.length; index += 1) {
+      const file = selectedFiles[index];
+      setExtractProgress(`正在处理 ${index + 1}/${selectedFiles.length}：${file.name}`);
+      try {
+        const content = await callModel({
+          model: selectedModel,
+          prompt: systemPrompt,
+          userContent: buildExtractRequest(file, activeOutputModules),
+        });
+        nextResults.push({
+          id: `${file.id}-${index}`,
+          chapterTitle: file.name,
+          content,
+        });
+        setResults([...nextResults]);
+      } catch (error) {
+        nextResults.push({
+          id: `${file.id}-${index}`,
+          chapterTitle: file.name,
+          content: error instanceof Error ? `【错误】${error.message}` : '【错误】模型请求失败。',
+        });
+        setResults([...nextResults]);
       }
-
-      nextResults.push({
-        id: `${chapter.id}-${Date.now()}-${index}`,
-        chapterTitle,
-        content,
-      });
-      setResults([...nextResults]);
     }
 
-    setExtractProgress(selectedModel ? `提炼完成，共 ${nextResults.length} 章` : `本地预览完成，共 ${nextResults.length} 章`);
+    const extractModeLabel = extractMode === 'chapter'
+      ? '逐章提炼'
+      : extractMode === 'multi'
+        ? `每 ${chaptersPerBatch} 章合并`
+        : '智能提炼';
+
+    const nextHistory: ExtractHistoryItem[] = [{
+      id: `${Date.now()}`,
+      timestamp: Date.now(),
+      fileNames: selectedFiles.map((file) => file.name),
+      extractModeLabel,
+      resultCount: nextResults.length,
+    }, ...history].slice(0, 20);
+    setHistory(nextHistory);
+    writeHistory(nextHistory);
+    setExtractProgress(`提炼完成，共 ${nextResults.length} 条结果`);
     setIsExtracting(false);
   };
 
-  const handleExportResults = () => {
-    const text = results.map((result) => `${result.chapterTitle}\n\n${result.content}`).join('\n\n---\n\n');
-    downloadText(`提炼剧情-${selectedNovel?.title ?? '未命名'}.txt`, text);
-  };
-
-  const handleSaveToPlotLibrary = () => {
-    if (!selectedNovel || results.length === 0) return;
-    savePlotItems(results.map((result) => ({
-      title: result.chapterTitle,
-      chapter: result.chapterTitle,
-      novelTitle: selectedNovel.title,
-      content: result.content,
-      tags: activeOutputModules.map((module) => module.label),
-    })));
-    setSaveMessage(`已保存 ${results.length} 条到剧情库`);
-  };
-
-  const handleWriteBack = (action: ResultAction) => {
-    if (!selectedNovel || results.length === 0) return;
-
-    if (action === 'plot') {
-      handleSaveToPlotLibrary();
-      return;
-    }
-
-    const storageKey = action === 'setting'
-      ? `xinyuexia_workbench_settings_${selectedNovel.id}`
-      : `xinyuexia_workbench_outline_${selectedNovel.id}`;
-    const tab = action === 'setting' ? '设定' : '章节概要';
-    const titlePrefix = action === 'setting' ? '提炼设定' : '提炼概要';
-
-    for (const result of results) {
-      addWorkbenchLibraryEntry(storageKey, tab, `${titlePrefix}-${result.chapterTitle}`, result.content);
-    }
-
-    setSaveMessage(`已写入 ${results.length} 条到${action === 'setting' ? '设定库' : '概要库'}`);
-  };
+  const linkedNovelName = selectedNovel?.title ?? '';
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-gray-50">
-      <header className="flex h-16 shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6">
-        <div>
-          <h1 className="flex items-center gap-2 text-lg font-bold text-gray-900">
-            <Sparkles className="h-5 w-5 text-brand" />
-            提炼剧情
-          </h1>
-          <p className="mt-0.5 text-xs text-gray-400">长按模块左侧把手可拖拽排序，系统指令和输出模块支持跨区移动。</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={selectedModel?.id ?? ''}
-            onChange={(event) => setSelectedModelId(event.target.value)}
-            className="h-9 min-w-[150px] rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-600 outline-none focus:border-brand"
-          >
-            {models.length === 0 ? (
-              <option value="">无可用模型</option>
-            ) : models.map((model) => (
-              <option key={model.id} value={model.id}>{model.name}</option>
-            ))}
-          </select>
-          <button
-            onClick={() => navigate('/model-manage')}
-            className="flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
-          >
-            <Settings className="h-4 w-4" />
-            模型设置
-          </button>
-          <button
-            onClick={() => void handleExtract()}
-            disabled={!canExtract}
-            className="flex h-9 items-center gap-1.5 rounded-lg bg-brand px-4 text-sm font-medium text-white shadow-sm transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-gray-300"
-          >
-            <Play className="h-4 w-4" />
-            {isExtracting ? '提炼中' : '开始提炼'}
-          </button>
-          <button
-            onClick={handleExportResults}
-            disabled={results.length === 0}
-            className="flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-300"
-          >
-            <Download className="h-4 w-4" />
-            导出结果
-          </button>
-          <button
-            onClick={handleExportModules}
-            className="flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
-          >
-            <Download className="h-4 w-4" />
-            导出模块
-          </button>
-          <button
-            onClick={() => importInputRef.current?.click()}
-            className="flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
-          >
-            <Upload className="h-4 w-4" />
-            导入模块
-          </button>
-          <button
-            onClick={() => {
-              resetExtractModules();
-              setSaveMessage('模块已重置');
-            }}
-            className="flex h-9 items-center gap-1.5 rounded-lg border border-red-200 bg-white px-4 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
-          >
-            <RotateCcw className="h-4 w-4" />
-            重置模块
-          </button>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept="application/json"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0] ?? null;
-              void handleImportModules(file);
-              event.target.value = '';
-            }}
-          />
+    <div className="flex h-full flex-col overflow-hidden bg-gray-50">
+      <header className="shrink-0 border-b border-gray-200 bg-white">
+        <div className="flex items-center justify-between px-6 py-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-brand" />
+              <h1 className="text-xl font-bold text-gray-900">提炼剧情</h1>
+            </div>
+            <p className="mt-1 text-xs text-gray-400">勾选模块 → 上传文件 → 配置 → AI 提炼 → 导出</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowLinkNovel(true)}
+              className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] transition-colors"
+              style={linkedNovelName ? { color: '#0084ff', backgroundColor: 'rgba(0,132,255,0.05)', borderColor: 'rgba(0,132,255,0.15)' } : { color: '#6b7280', backgroundColor: '#f9fafb', borderColor: '#e5e7eb' }}
+            >
+              <BookMarked className="h-3 w-3" />
+              <span className="max-w-[100px] truncate">{linkedNovelName || '关联小说'}</span>
+            </button>
+            <button
+              onClick={() => {
+                const json = exportExtractConfig();
+                const blob = new Blob([json], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `新月下写作-提炼配置-${new Date().toLocaleDateString('zh-CN')}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="flex items-center gap-1 px-3 py-1.5 text-[11px] text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              <FileText className="h-3 w-3" /> 导出配置
+            </button>
+            <button
+              onClick={() => { setShowImportConfig(true); setImportText(''); setImportMessage(''); }}
+              className="flex items-center gap-1 px-3 py-1.5 text-[11px] text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              <FileText className="h-3 w-3" /> 导入配置
+            </button>
+            <button
+              onClick={() => setShowHistory(true)}
+              className="flex items-center gap-1 px-3 py-1.5 text-[11px] text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
+            >
+              <FileText className="h-3 w-3" /> 提炼历史
+              {history.length > 0 && <span className="ml-0.5 text-[9px] text-gray-400">({history.length})</span>}
+            </button>
+          </div>
         </div>
       </header>
 
-      <div className="border-b border-gray-200 bg-white px-6 py-3">
-        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
-          <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">作品: {selectedNovel?.title ?? '未选择'}</span>
-          <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">已选章节: {selectedChapters.length}</span>
-          <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">系统模块: {activeSystemModules.length}</span>
-          <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">输出模块: {activeOutputModules.length}</span>
-          <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">结果数: {results.length}</span>
-          <span className="rounded-full border border-brand/20 bg-brand-light px-3 py-1 text-brand">
-            {saveMessage || extractProgress || '准备就绪'}
-          </span>
-        </div>
-      </div>
-
-      <main className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 xl:grid-cols-[260px_minmax(420px,1fr)_320px] xl:overflow-hidden">
-        <aside className="flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm xl:min-h-0">
+      <div className="flex min-h-0 flex-1">
+        <div className="flex w-[240px] shrink-0 flex-col border-r border-gray-200 bg-white">
           <ExtractDropZone
             id="system"
             title="系统指令"
@@ -419,153 +379,338 @@ export function ExtractPage() {
             onDropModule={handleDropTarget}
             onDropZone={handleDropTarget}
           />
-        </aside>
+          <div className="border-t border-gray-100 px-2.5 py-2">
+            <button
+              onClick={() => {
+                resetExtractModules();
+                setSaveMessage('模块已重置');
+              }}
+              className="flex w-full items-center justify-center gap-1 rounded-md bg-brand-light px-2 py-1.5 text-[11px] text-brand hover:bg-brand-light/80"
+            >
+              <RotateCcw className="h-3 w-3" />
+              重置模块
+            </button>
+          </div>
+        </div>
 
-        <section className="flex min-h-0 flex-col gap-4">
-          <ChapterSelectPanel
-            novels={novels}
-            selectedNovelId={selectedNovel?.id ?? null}
-            selectedChapterIds={selectedChapterIds}
-            onSelectNovel={handleSelectNovel}
-            onToggleChapter={handleToggleChapter}
-            onSelectFirst={handleSelectFirst}
-            onSelectAll={handleSelectAll}
-            onClear={() => {
-              setSelectedChapterIds(new Set());
-              setResults([]);
-              setSaveMessage('');
-              setExtractProgress('');
-            }}
-          />
-
-          <section className="min-h-[220px] overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm">
-            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
-              <h2 className="text-sm font-bold text-gray-900">提炼结果</h2>
-              <div className="flex items-center gap-2 text-xs text-gray-400">
-                <button
-                  onClick={handleSaveToPlotLibrary}
-                  disabled={results.length === 0}
-                  className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50 disabled:text-gray-300"
-                >
-                  入剧情库
-                </button>
-                <button
-                  onClick={() => handleWriteBack('setting')}
-                  disabled={results.length === 0}
-                  className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50 disabled:text-gray-300"
-                >
-                  入设定库
-                </button>
-                <button
-                  onClick={() => handleWriteBack('outline')}
-                  disabled={results.length === 0}
-                  className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-gray-50 disabled:text-gray-300"
-                >
-                  入概要库
-                </button>
-                <button
-                  onClick={() => {
-                    setResults([]);
-                    setSaveMessage('');
-                    setExtractProgress('');
-                  }}
-                  disabled={results.length === 0}
-                  className="rounded-md border border-red-200 px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 disabled:text-red-300"
-                >
-                  清空
-                </button>
-              </div>
-            </div>
-            <div className="max-h-[320px] overflow-y-auto p-4">
-              {results.length === 0 ? (
-                <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-gray-200 px-4 text-center text-sm text-gray-400">
-                  选择章节后点击“开始提炼”。未配置模型时会生成本地预览；配置模型后会逐章调用模型。
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="mb-4 grid grid-cols-[1.1fr_1.2fr_2.2fr] gap-3">
+            <div className="rounded-xl border border-gray-200 bg-white p-3">
+              <h3 className="mb-2 flex items-center gap-1 text-xs font-bold text-gray-900">
+                <Settings className="h-3.5 w-3.5 text-brand" /> AI 模型
+              </h3>
+              {models.length === 0 ? (
+                <div className="space-y-1">
+                  <p className="text-[11px] text-amber-500">未配置可用模型</p>
+                  <button onClick={() => navigate('/model-manage')} className="text-[11px] text-brand hover:underline">去“模型管理”配置</button>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {results.map((result) => (
-                    <article key={result.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <h3 className="text-xs font-bold text-gray-800">{result.chapterTitle}</h3>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => savePlotItems([{
-                              title: result.chapterTitle,
-                              chapter: result.chapterTitle,
-                              novelTitle: selectedNovel?.title ?? '',
-                              content: result.content,
-                              tags: activeOutputModules.map((module) => module.label),
-                            }])}
-                            className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-white"
-                          >
-                            剧情库
-                          </button>
-                          <button
-                            onClick={() => addWorkbenchLibraryEntry(
-                              `xinyuexia_workbench_settings_${selectedNovel?.id ?? 0}`,
-                              '设定',
-                              `提炼设定-${result.chapterTitle}`,
-                              result.content,
-                            )}
-                            className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-white"
-                          >
-                            设定库
-                          </button>
-                          <button
-                            onClick={() => addWorkbenchLibraryEntry(
-                              `xinyuexia_workbench_outline_${selectedNovel?.id ?? 0}`,
-                              '章节概要',
-                              `提炼概要-${result.chapterTitle}`,
-                              result.content,
-                            )}
-                            className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-white"
-                          >
-                            概要库
-                          </button>
-                        </div>
+                <div className="space-y-1.5">
+                  {models.map((model) => (
+                    <button
+                      key={model.id}
+                      onClick={() => setSelectedModelId(model.id)}
+                      className={`w-full rounded-lg border px-2.5 py-1.5 text-left text-xs transition-all ${
+                        selectedModel?.id === model.id
+                          ? 'border-brand bg-brand-light text-brand font-medium'
+                          : 'border-gray-200 text-gray-700 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span>{model.name}</span>
+                        {selectedModel?.id === model.id && <span className="text-brand">✓</span>}
                       </div>
-                      <pre className="whitespace-pre-wrap text-xs leading-6 text-gray-600">{result.content}</pre>
-                    </article>
+                    </button>
                   ))}
                 </div>
               )}
             </div>
-          </section>
-        </section>
 
-        <aside className="flex min-h-0 flex-col rounded-xl border border-gray-100 bg-white shadow-sm">
-          <div className="border-b border-gray-100 px-4 py-3">
-            <h2 className="text-sm font-bold text-gray-900">模块编辑</h2>
-            <p className="mt-1 text-xs text-gray-400">点击模块卡片编辑内容，长按左侧把手后拖拽调整顺序。</p>
-          </div>
-          {selectedModule ? (
-            <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
-              <label className="space-y-1.5">
-                <span className="text-xs font-medium text-gray-500">模块名称</span>
-                <input
-                  value={selectedModule.label}
-                  disabled={selectedModule.locked}
-                  onChange={(event) => updateModule(selectedModule.id, { label: event.target.value })}
-                  className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-800 outline-none transition-colors focus:border-brand disabled:bg-gray-50 disabled:text-gray-400"
-                />
-              </label>
-              <label className="flex min-h-0 flex-1 flex-col space-y-1.5">
-                <span className="text-xs font-medium text-gray-500">指令内容</span>
-                <textarea
-                  value={selectedModule.instruction}
-                  onChange={(event) => updateModule(selectedModule.id, { instruction: event.target.value })}
-                  className="min-h-[220px] flex-1 resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm leading-6 text-gray-700 outline-none transition-colors focus:border-brand"
-                />
-              </label>
-              <div className="rounded-lg bg-gray-50 p-3 text-xs leading-5 text-gray-500">
-                当前区域：{selectedModule.zone === 'system' ? '系统指令' : '输出模块'}。锁定模块不能改名，但仍可跨区拖拽调整顺序。
+            <div className="rounded-xl border border-gray-200 bg-white p-3">
+              <h3 className="mb-2 text-xs font-bold text-gray-900">提炼模式</h3>
+              <div className="space-y-2">
+                <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors ${extractMode === 'chapter' ? 'border-brand bg-brand-light' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <input type="radio" checked={extractMode === 'chapter'} onChange={() => setExtractMode('chapter')} className="w-3 h-3 text-brand" />
+                  <div>
+                    <div className={`text-xs font-medium ${extractMode === 'chapter' ? 'text-brand' : 'text-gray-700'}`}>逐章提炼</div>
+                    <div className="text-[10px] text-gray-400">每章单独提炼</div>
+                  </div>
+                </label>
+                <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors ${extractMode === 'multi' ? 'border-brand bg-brand-light' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <input type="radio" checked={extractMode === 'multi'} onChange={() => setExtractMode('multi')} className="w-3 h-3 text-brand shrink-0" />
+                  <div className="flex-1">
+                    <div className={`text-xs font-medium ${extractMode === 'multi' ? 'text-brand' : 'text-gray-700'}`}>
+                      每 <input type="number" min={2} max={50} value={chaptersPerBatch} onClick={(event) => event.stopPropagation()} onChange={(event) => setChaptersPerBatch(Math.max(2, Math.min(50, Number(event.target.value))))} className="mx-1 w-10 rounded border border-gray-200 bg-white px-1 py-0.5 text-center text-xs focus:border-brand focus:outline-none" /> 章合并
+                    </div>
+                    <div className="text-[10px] text-gray-400">N 章合并为一组</div>
+                  </div>
+                </label>
+                <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors ${extractMode === 'smart' ? 'border-brand bg-brand-light' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <input type="radio" checked={extractMode === 'smart'} onChange={() => setExtractMode('smart')} className="w-3 h-3 text-brand" />
+                  <div>
+                    <div className={`text-xs font-medium ${extractMode === 'smart' ? 'text-brand' : 'text-gray-700'}`}>智能提炼</div>
+                    <div className="text-[10px] text-gray-400">AI 智能弹性分组提炼</div>
+                  </div>
+                </label>
               </div>
             </div>
-          ) : (
-            <div className="flex flex-1 items-center justify-center text-sm text-gray-400">请选择一个模块</div>
-          )}
-        </aside>
-      </main>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-3">
+              <h3 className="mb-2 text-xs font-bold text-gray-900">导出设置</h3>
+              <div className="space-y-2">
+                <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors ${outputMode === 'single' ? 'border-brand bg-brand-light' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <input type="radio" checked={outputMode === 'single'} onChange={() => setOutputMode('single')} className="w-3 h-3 text-brand" />
+                  <span className={`text-xs font-medium ${outputMode === 'single' ? 'text-brand' : 'text-gray-700'}`}>1个剧情点 = 1个txt</span>
+                </label>
+                <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors ${outputMode === 'book' ? 'border-brand bg-brand-light' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <input type="radio" checked={outputMode === 'book'} onChange={() => setOutputMode('book')} className="w-3 h-3 text-brand" />
+                  <span className={`text-xs font-medium ${outputMode === 'book' ? 'text-brand' : 'text-gray-700'}`}>1本小说 = 1个txt</span>
+                </label>
+                <label className={`flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors ${outputMode === 'multi' ? 'border-brand bg-brand-light' : 'border-gray-200 hover:border-gray-300'}`}>
+                  <input type="radio" checked={outputMode === 'multi'} onChange={() => setOutputMode('multi')} className="w-3 h-3 text-brand" />
+                  <div className="flex items-center gap-1 text-xs">
+                    <input type="number" min={1} max={1000} value={pointsPerFile} onClick={(event) => event.stopPropagation()} onChange={(event) => setPointsPerFile(Math.max(1, Math.min(1000, Number(event.target.value))))} className="w-12 rounded border border-gray-200 bg-white px-1 py-0.5 text-center text-xs focus:border-brand focus:outline-none" />
+                    <span className={`font-medium ${outputMode === 'multi' ? 'text-brand' : 'text-gray-700'}`}>个剧情点 = 1个txt</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-[minmax(0,1fr)_360px] gap-4">
+            <div className="space-y-4">
+              <div className="rounded-xl border border-gray-200 bg-white p-4">
+                <h3 className="mb-3 flex items-center gap-1.5 text-sm font-bold text-gray-900">
+                  <FileText className="h-4 w-4 text-brand" /> 上传 TXT 文件
+                </h3>
+                <input ref={fileInputRef} type="file" accept=".txt" multiple onChange={(event) => { const list = event.target.files; if (list) void handleFiles(list); event.target.value = ''; }} className="hidden" />
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  onDragOver={(event) => { event.preventDefault(); setIsDraggingFile(true); }}
+                  onDragLeave={() => setIsDraggingFile(false)}
+                  onDrop={(event) => {
+                    event.preventDefault();
+                    setIsDraggingFile(false);
+                    void handleFiles(event.dataTransfer.files);
+                  }}
+                  className={`flex w-full cursor-pointer flex-col items-center justify-center gap-1.5 rounded-lg border-2 border-dashed px-4 py-8 transition-all ${isDraggingFile ? 'border-brand bg-brand-light/40' : 'border-gray-200 hover:border-brand hover:bg-brand-light/30'}`}
+                >
+                  <FileText className={`h-8 w-8 ${isDraggingFile ? 'text-brand' : 'text-gray-300'}`} />
+                  <span className={`text-sm ${isDraggingFile ? 'font-medium text-brand' : 'text-gray-500'}`}>{isDraggingFile ? '松开上传' : '点击或拖拽 .txt 文件'}</span>
+                  <span className="text-[10px] text-gray-400">内容自动保存，关闭后可继续</span>
+                </div>
+
+                {files.length > 0 && (
+                  <div className="mt-4">
+                    <div className="mb-1.5 flex items-center justify-between">
+                      <span className="text-xs text-gray-600">{files.length} 个文件，{selectedFiles.length} 个待处理</span>
+                      <div className="flex gap-2">
+                        <button onClick={() => setFiles((prev) => prev.map((file) => ({ ...file, selected: true })))} className="text-[10px] text-brand hover:underline">全选</button>
+                        <button onClick={() => setFiles((prev) => prev.map((file) => ({ ...file, selected: false })))} className="text-[10px] text-gray-400 hover:underline">取消</button>
+                        <button onClick={() => setFiles([])} className="text-[10px] text-red-400 hover:underline">清空</button>
+                      </div>
+                    </div>
+                    <div className="max-h-40 divide-y divide-gray-50 overflow-y-auto rounded-lg border border-gray-100">
+                      {[...files].reverse().map((file) => (
+                        <div key={file.id} className="flex items-center gap-2 px-2.5 py-1.5 hover:bg-gray-50">
+                          <input type="checkbox" checked={file.selected} onChange={() => setFiles((prev) => prev.map((item) => item.id === file.id ? { ...item, selected: !item.selected } : item))} className="h-3.5 w-3.5 rounded border-gray-300 text-brand focus:ring-brand" />
+                          <FileText className="h-3.5 w-3.5 shrink-0 text-gray-400" />
+                          <span className="flex-1 truncate text-xs text-gray-700">{file.name}</span>
+                          <span className="text-[10px] text-gray-400">{file.content.length.toLocaleString()}字</span>
+                          <button onClick={() => setFiles((prev) => prev.filter((item) => item.id !== file.id))} className="p-0.5 text-gray-300 hover:text-red-500"><X className="h-3 w-3" /></button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between">
+                <span className="rounded-full border border-brand/20 bg-brand-light px-3 py-1 text-xs text-brand">
+                  {saveMessage || extractProgress || '准备就绪'}
+                </span>
+                <button
+                  onClick={() => void handleExtract()}
+                  disabled={!canExtract}
+                  className="flex items-center gap-1.5 rounded-lg bg-brand px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-gray-300"
+                >
+                  <Play className="h-4 w-4" /> {isExtracting ? '提炼中' : '开始提炼'}
+                </button>
+              </div>
+
+              {results.length > 0 && (
+                <div className="rounded-xl border border-gray-200 bg-white p-4">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-gray-900">提炼结果</h3>
+                    <button
+                      onClick={() => downloadText('提炼结果.txt', results.map((result) => `${result.chapterTitle}\n\n${result.content}`).join('\n\n---\n\n'))}
+                      className="rounded-md border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50"
+                    >
+                      <Download className="mr-1 inline h-3.5 w-3.5" />
+                      导出结果
+                    </button>
+                  </div>
+                  <div className="space-y-3">
+                    {results.map((result) => (
+                      <article key={result.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                        <h4 className="mb-2 text-xs font-bold text-gray-800">{result.chapterTitle}</h4>
+                        <pre className="whitespace-pre-wrap text-xs leading-6 text-gray-600">{result.content}</pre>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-4">
+              <div className="rounded-xl border border-gray-200 bg-white">
+                <div className="border-b border-gray-100 px-4 py-3">
+                  <h3 className="text-sm font-bold text-gray-900">模块预览</h3>
+                </div>
+                <div className="space-y-3 p-4">
+                  {activeModules.map((module) => (
+                    <button
+                      key={module.id}
+                      onClick={() => setSelectedModuleId(module.id)}
+                      className={`w-full overflow-hidden rounded-xl border text-left transition-colors ${selectedModuleId === module.id ? 'border-brand bg-brand-light/40' : 'border-gray-100 hover:border-brand/40'}`}
+                    >
+                      <div className={`px-3 py-2 text-sm font-bold ${module.zone === 'system' ? 'bg-orange-50 text-orange-600' : 'bg-sky-50 text-sky-600'}`}>
+                        {module.label}
+                      </div>
+                      <div className="whitespace-pre-wrap p-3 text-xs leading-6 text-gray-600">{module.instruction}</div>
+                    </button>
+                  ))}
+                  {!activeModules.length && (
+                    <div className="py-8 text-center text-sm text-gray-400">暂无激活模块</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-white">
+                <div className="border-b border-gray-100 px-4 py-3">
+                  <h3 className="text-sm font-bold text-gray-900">模块编辑</h3>
+                </div>
+                {selectedModule ? (
+                  <div className="space-y-3 p-4">
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-gray-500">模块名称</span>
+                      <input
+                        value={selectedModule.label}
+                        disabled={selectedModule.locked}
+                        onChange={(event) => updateModule(selectedModule.id, { label: event.target.value })}
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-brand disabled:bg-gray-50 disabled:text-gray-400"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-gray-500">指令内容</span>
+                      <textarea
+                        value={selectedModule.instruction}
+                        onChange={(event) => updateModule(selectedModule.id, { instruction: event.target.value })}
+                        className="h-[260px] w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm leading-6 outline-none focus:border-brand"
+                      />
+                    </label>
+                    <div className="rounded-lg bg-gray-50 p-3 text-xs leading-5 text-gray-500">
+                      当前区域：{selectedModule.zone === 'system' ? '系统指令' : '输出模块'}。锁定模块不能改名，但仍可继续调整内容和顺序。
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-6 text-center text-sm text-gray-400">点击左侧或上方模块后，这里会显示编辑区。</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {showHistory && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="flex max-h-[80vh] w-[640px] flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <h3 className="text-base font-bold text-gray-900">提炼历史</h3>
+              <button onClick={() => setShowHistory(false)} className="rounded p-1 text-gray-400 hover:text-gray-600">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {history.length === 0 ? (
+                <div className="py-12 text-center text-sm text-gray-400">暂无提炼记录</div>
+              ) : history.map((item, index) => (
+                <div key={item.id} className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                  <div className="mb-1 text-xs font-bold text-brand"># {index + 1}</div>
+                  <div className="text-xs text-gray-700">{item.fileNames.join('、')}</div>
+                  <div className="mt-1 text-[11px] text-gray-400">{item.extractModeLabel} · {item.resultCount} 条结果</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showImportConfig && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm">
+          <div className="flex w-[620px] max-w-[92vw] flex-col overflow-hidden rounded-xl bg-white shadow-2xl">
+            <div className="border-b border-gray-100 px-5 py-4">
+              <h3 className="text-base font-bold text-gray-900">导入配置</h3>
+              <p className="mt-1 text-xs text-gray-400">导入后会覆盖当前所有模块设置，建议先导出备份。</p>
+            </div>
+            <div className="space-y-3 p-5">
+              <textarea
+                value={importText}
+                onChange={(event) => setImportText(event.target.value)}
+                className="h-[220px] w-full resize-none rounded-lg border border-gray-200 px-3 py-2 text-sm leading-6 outline-none focus:border-brand"
+                placeholder="粘贴配置 JSON，或点右下角选择配置文件"
+              />
+              {importMessage && (
+                <div className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-600">{importMessage}</div>
+              )}
+              <input
+                ref={fileImportRef}
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  const reader = new FileReader();
+                  reader.onload = (loadEvent) => {
+                    setImportText(String(loadEvent.target?.result || ''));
+                    setImportMessage('');
+                  };
+                  reader.readAsText(file);
+                  event.target.value = '';
+                }}
+              />
+            </div>
+            <div className="flex items-center justify-between border-t border-gray-100 bg-gray-50/50 px-5 py-3">
+              <button onClick={() => fileImportRef.current?.click()} className="rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-white">
+                选择配置文件
+              </button>
+              <div className="flex gap-2">
+                <button onClick={() => setShowImportConfig(false)} className="rounded-md border border-gray-200 px-4 py-2 text-sm text-gray-600 hover:bg-white">
+                  取消
+                </button>
+                <button
+                  onClick={() => {
+                    const result = importExtractConfig(importText);
+                    setImportMessage(result.message);
+                  }}
+                  className="rounded-md bg-brand px-4 py-2 text-sm text-white hover:bg-brand-dark"
+                >
+                  导入
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <LinkNovelModal
+        isOpen={showLinkNovel}
+        novels={novels}
+        selectedNovelId={selectedNovelId}
+        onSelect={setSelectedNovelId}
+        onClose={() => setShowLinkNovel(false)}
+      />
     </div>
   );
 }
