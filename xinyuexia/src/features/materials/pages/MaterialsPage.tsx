@@ -1,9 +1,9 @@
-import { ArrowUpDown, BookOpen, Check, Edit3, Library, Plus, Search, Trash2, X } from 'lucide-react';
+import { BookOpen, Edit3, Library, Plus, Search, Trash2, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
-import { useNovelLibrary } from '@/features/novels/hooks/useNovelLibrary';
 import { useMaterials } from '@/features/materials/hooks/useMaterials';
 import type { MaterialItem, MaterialType } from '@/features/materials/model/materialTypes';
+import { useNovelLibrary } from '@/features/novels/hooks/useNovelLibrary';
 
 type SortMode = 'time' | 'title';
 
@@ -46,11 +46,11 @@ export function MaterialsPage() {
   const filteredItems = useMemo(() => {
     const keyword = search.trim().toLowerCase();
     const result = items.filter((item) => {
-      const matchKeyword = !keyword ||
-        item.title.toLowerCase().includes(keyword) ||
-        item.novelTitle.toLowerCase().includes(keyword) ||
-        item.content.toLowerCase().includes(keyword) ||
-        (item.chapterName?.toLowerCase().includes(keyword) ?? false);
+      const matchKeyword = !keyword
+        || item.title.toLowerCase().includes(keyword)
+        || item.novelTitle.toLowerCase().includes(keyword)
+        || item.content.toLowerCase().includes(keyword)
+        || (item.chapterName?.toLowerCase().includes(keyword) ?? false);
       const matchNovel = !activeNovelId || item.novelId === activeNovelId;
       const matchType = activeType === 'all' || item.type === activeType;
       return matchKeyword && matchNovel && matchType;
@@ -257,7 +257,7 @@ export function MaterialsPage() {
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-bold text-gray-900">{editingId ? '编辑资料' : '新建资料'}</h2>
-                <p className="mt-1 text-xs text-gray-400">资料会保存到本地，后续可接入同步和导出。</p>
+                <p className="mt-1 text-xs text-gray-400">资料会保存到本地，后续我们可以继续接同步和导出。</p>
               </div>
               <div className="flex items-center gap-2">
                 <button onClick={clearDraft} className="rounded-md border border-gray-200 px-3 py-1.5 text-xs text-gray-600 hover:bg-gray-50">

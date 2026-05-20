@@ -1,4 +1,5 @@
 import { Check, GripVertical, Layers, Lock } from 'lucide-react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 
 import type { ExtractModule } from '@/features/extract/model/extractTypes';
 
@@ -25,6 +26,56 @@ export function SortableExtractModule({
   onDragOver,
   onDrop,
 }: SortableExtractModuleProps) {
+  const [isArmedDrag, setIsArmedDrag] = useState(false);
+  const pressTimerRef = useRef<number | null>(null);
+  const pressStartRef = useRef({ x: 0, y: 0 });
+  const nativeDraggingRef = useRef(false);
+
+  useEffect(() => {
+    return () => {
+      if (pressTimerRef.current !== null) window.clearTimeout(pressTimerRef.current);
+    };
+  }, []);
+
+  const clearPressTimer = () => {
+    if (pressTimerRef.current !== null) {
+      window.clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  };
+
+  const resetDragState = () => {
+    clearPressTimer();
+    nativeDraggingRef.current = false;
+    setIsArmedDrag(false);
+  };
+
+  const handlePointerDown = (event: ReactPointerEvent) => {
+    if (module.locked) return;
+    pressStartRef.current = { x: event.clientX, y: event.clientY };
+    clearPressTimer();
+    pressTimerRef.current = window.setTimeout(() => {
+      setIsArmedDrag(true);
+    }, 180);
+  };
+
+  const handlePointerMove = (event: ReactPointerEvent) => {
+    if (nativeDraggingRef.current || isArmedDrag) return;
+    const deltaX = Math.abs(event.clientX - pressStartRef.current.x);
+    const deltaY = Math.abs(event.clientY - pressStartRef.current.y);
+    if (deltaX > 6 || deltaY > 6) {
+      clearPressTimer();
+    }
+  };
+
+  const handlePointerUp = () => {
+    if (!nativeDraggingRef.current) {
+      resetDragState();
+    } else {
+      clearPressTimer();
+    }
+  };
+
   return (
     <div
       onDragOver={(event) => {
@@ -39,17 +90,27 @@ export function SortableExtractModule({
     >
       <div className={`flex items-center text-left transition-colors ${isSelected ? 'bg-brand-light/70' : 'hover:bg-gray-50'}`}>
         <button
-          draggable
+          draggable={isArmedDrag}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={resetDragState}
           onDragStart={(event) => {
             event.dataTransfer.effectAllowed = 'move';
             event.dataTransfer.setData('text/plain', module.id);
+            nativeDraggingRef.current = true;
             onDragStart(module.id);
           }}
-          onDragEnd={onDragEnd}
-          className="flex w-6 self-stretch cursor-grab items-center justify-center rounded-l active:cursor-grabbing hover:bg-gray-200/60"
-          title="按住拖拽排序"
+          onDragEnd={() => {
+            resetDragState();
+            onDragEnd();
+          }}
+          className={`flex w-6 self-stretch cursor-grab items-center justify-center rounded-l active:cursor-grabbing hover:bg-gray-200/60 ${
+            isArmedDrag ? 'bg-brand/10' : ''
+          }`}
+          title="长按后拖拽排序"
         >
-          <GripVertical className="h-3.5 w-3.5 text-gray-300" />
+          <GripVertical className={`h-3.5 w-3.5 ${isArmedDrag ? 'text-brand' : 'text-gray-300'}`} />
         </button>
 
         <button onClick={() => onSelect(module.id)} className="flex min-w-0 flex-1 items-center gap-1.5 py-2 pr-2 text-left">

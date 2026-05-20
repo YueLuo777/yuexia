@@ -1,8 +1,8 @@
 import { Check, Edit3, Lock, Plus, Search, Sparkles, Star, Trash2, Unlock, X } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
-import { usePrompts } from '@/features/prompts/hooks/usePrompts';
 import type { PromptItem } from '@/features/prompts/model/promptTypes';
+import { usePrompts } from '@/features/prompts/hooks/usePrompts';
 
 export function PromptsPage() {
   const {
@@ -26,10 +26,10 @@ export function PromptsPage() {
     const keyword = search.trim().toLowerCase();
     return prompts.filter((prompt) => {
       const matchCategory = activeCategory === '全部' || prompt.category === activeCategory;
-      const matchKeyword = !keyword ||
-        prompt.name.toLowerCase().includes(keyword) ||
-        prompt.description.toLowerCase().includes(keyword) ||
-        prompt.content.toLowerCase().includes(keyword);
+      const matchKeyword = !keyword
+        || prompt.name.toLowerCase().includes(keyword)
+        || prompt.description.toLowerCase().includes(keyword)
+        || prompt.content.toLowerCase().includes(keyword);
       return matchCategory && matchKeyword;
     });
   }, [activeCategory, prompts, search]);

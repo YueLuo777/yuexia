@@ -74,7 +74,10 @@ export function WorkbenchAIPanel({
     setInput('');
 
     if (!selectedModel) {
-      setMessages((prev) => [...prev, { role: 'agent', content: '尚未配置启用模型。请先到“模型管理”新增并启用模型。' }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: 'agent', content: '尚未配置可用模型。请先到“模型管理”中新增并启用模型。' },
+      ]);
       return;
     }
 
@@ -88,10 +91,13 @@ export function WorkbenchAIPanel({
       });
       setMessages((prev) => [...prev, { role: 'agent', content }]);
     } catch (error) {
-      setMessages((prev) => [...prev, {
-        role: 'agent',
-        content: error instanceof Error ? `【错误】${error.message}` : '【错误】模型请求失败',
-      }]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'agent',
+          content: error instanceof Error ? `【错误】${error.message}` : '【错误】模型请求失败。',
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -113,7 +119,7 @@ export function WorkbenchAIPanel({
   const canApplyMessage = (message: ChatMessage) => (
     message.role === 'agent'
     && !message.content.startsWith('【错误】')
-    && !message.content.includes('尚未配置启用模型')
+    && !message.content.includes('尚未配置可用模型')
   );
 
   return (
@@ -139,10 +145,7 @@ export function WorkbenchAIPanel({
         </button>
         <div className="mt-2 flex items-center justify-between text-[11px] text-gray-400">
           <span>关联字数：{selectedWordCount}</span>
-          <button
-            onClick={() => setMessages([])}
-            className="flex items-center gap-1 text-brand"
-          >
+          <button onClick={() => setMessages([])} className="flex items-center gap-1 text-brand">
             <Plus className="h-3 w-3" />
             新对话
           </button>
@@ -155,7 +158,7 @@ export function WorkbenchAIPanel({
             className="min-w-0 rounded-md border border-gray-200 bg-gray-50 px-2 py-1.5 text-gray-500 outline-none focus:border-brand"
           >
             {enabledModels.length === 0 ? (
-              <option value="">无启用模型</option>
+              <option value="">无可用模型</option>
             ) : enabledModels.map((model) => (
               <option key={model.id} value={model.id}>{model.name}</option>
             ))}
@@ -179,7 +182,7 @@ export function WorkbenchAIPanel({
           <div className="flex h-full flex-col items-center justify-center text-center">
             <WandSparkles className="mb-3 h-8 w-8 text-gray-300" />
             <p className="text-sm text-gray-400">输入需求后开始对话</p>
-            <p className="mt-1 text-xs leading-5 text-gray-300">会自动携带当前章节正文，并使用选中的模型和提示词。</p>
+            <p className="mt-1 text-xs leading-5 text-gray-300">会自动携带当前章节正文，并使用你选中的模型和提示词。</p>
           </div>
         ) : (
           <div className="space-y-3">

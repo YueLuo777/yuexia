@@ -1,5 +1,5 @@
 import { RefreshCw, Trash2, X } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 import type { RecycledNovel, WorkType } from '@/features/novels/model/novelTypes';
 
@@ -13,6 +13,8 @@ interface RecycleBinModalProps {
 }
 
 export function RecycleBinModal({ isOpen, type, items, onClose, onRestore, onPermanentDelete }: RecycleBinModalProps) {
+  const [, forceRefresh] = useState(0);
+
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -37,7 +39,10 @@ export function RecycleBinModal({ isOpen, type, items, onClose, onRestore, onPer
             <p className="mt-0.5 text-xs text-gray-400">总数：{filtered.length}</p>
           </div>
           <div className="flex items-center gap-2">
-            <button className="flex items-center gap-1 rounded-md border border-gray-200 px-3 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-50">
+            <button
+              onClick={() => forceRefresh((value) => value + 1)}
+              className="flex items-center gap-1 rounded-md border border-gray-200 px-3 py-1.5 text-xs text-gray-500 transition-colors hover:bg-gray-50"
+            >
               <RefreshCw className="h-3.5 w-3.5" />
               <span>刷新</span>
             </button>
@@ -52,7 +57,7 @@ export function RecycleBinModal({ isOpen, type, items, onClose, onRestore, onPer
             <div className="flex h-full flex-col items-center justify-center rounded-xl border border-dashed border-gray-200">
               <Trash2 className="mb-3 h-10 w-10 text-gray-300" />
               <p className="mb-1 text-sm text-gray-500">回收站为空</p>
-              <p className="text-xs text-gray-400">删除的{typeLabel}会显示在这里。</p>
+              <p className="text-xs text-gray-400">删除后的{typeLabel}会显示在这里。</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -63,7 +68,7 @@ export function RecycleBinModal({ isOpen, type, items, onClose, onRestore, onPer
                     <span className="text-xs text-gray-400">{typeLabel}</span>
                   </div>
                   <p className="mb-2 text-xs text-gray-400">{novel.synopsis || '暂无简介'}</p>
-                  <p className="mb-3 text-xs text-gray-400">删除于 {novel.deletedAt} · 到期 {novel.expireAt}</p>
+                  <p className="mb-3 text-xs text-gray-400">删除于 {novel.deletedAt}，到期 {novel.expireAt}</p>
                   <div className="flex items-center justify-end gap-3">
                     <button onClick={() => onRestore(novel.id)} className="rounded-md border border-gray-200 px-3 py-1.5 text-xs text-gray-600 transition-colors hover:bg-gray-50">
                       恢复

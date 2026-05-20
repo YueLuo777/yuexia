@@ -1,19 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, Outlet, useLocation } from 'react-router-dom';
+import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Search } from 'lucide-react';
 
+import { NavSettingsModal } from '@/shared/navigation/NavSettingsModal';
 import {
   getIconByName,
   loadCollapsedSections,
   loadNavConfig,
+  resetNavConfig,
   saveCollapsedSections,
+  saveNavConfig,
   type NavGroupConfig,
 } from '@/shared/navigation/navConfig';
 
 export function DashboardLayout() {
   const location = useLocation();
-  const [navConfig] = useState<NavGroupConfig[]>(() => loadNavConfig());
+  const navigate = useNavigate();
+  const [navConfig, setNavConfig] = useState<NavGroupConfig[]>(() => loadNavConfig());
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>(() => loadCollapsedSections());
+  const [showNavSettings, setShowNavSettings] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -46,7 +51,11 @@ export function DashboardLayout() {
           </div>
           <span className="text-base font-bold text-gray-900">月下写作</span>
         </div>
-        <button className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600" title="搜索">
+        <button
+          onClick={() => navigate('/novels')}
+          className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+          title="打开作品列表"
+        >
           <Search className="h-5 w-5" />
         </button>
       </header>
@@ -98,7 +107,10 @@ export function DashboardLayout() {
           })}
 
           <div className="mt-auto border-t border-gray-100 p-4">
-            <button className="flex w-full items-center justify-center whitespace-nowrap rounded-md bg-brand px-3 py-2 text-xs text-white transition-colors hover:bg-brand-dark">
+            <button
+              onClick={() => setShowNavSettings(true)}
+              className="flex w-full items-center justify-center whitespace-nowrap rounded-md bg-brand px-3 py-2 text-xs text-white transition-colors hover:bg-brand-dark"
+            >
               导航设置
             </button>
           </div>
@@ -108,6 +120,20 @@ export function DashboardLayout() {
           <Outlet />
         </main>
       </div>
+
+      <NavSettingsModal
+        isOpen={showNavSettings}
+        onClose={() => setShowNavSettings(false)}
+        config={navConfig}
+        onSave={(next) => {
+          setNavConfig(next);
+          saveNavConfig(next);
+        }}
+        onReset={() => {
+          const fresh = resetNavConfig();
+          setNavConfig(fresh);
+        }}
+      />
     </div>
   );
 }

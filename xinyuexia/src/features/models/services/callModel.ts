@@ -1,10 +1,12 @@
 import type { ModelItem } from '@/features/models/model/modelTypes';
+import { addRecord } from '@/hooks/useCallRecords';
 
 interface CallModelInput {
   model: ModelItem;
   prompt: string;
   userContent: string;
   chapterContext?: string;
+  recordType?: 'api_test' | 'chat' | 'generate' | 'stream';
 }
 
 function normalizeBaseUrl(baseUrl: string) {
@@ -13,11 +15,20 @@ function normalizeBaseUrl(baseUrl: string) {
   return `${trimmed}/chat/completions`;
 }
 
-export async function callModel({ model, prompt, userContent, chapterContext }: CallModelInput) {
-  if (!model.baseUrl.trim()) throw new Error('模型缺少 Base URL');
-  if (!model.apiKey.trim()) throw new Error('模型缺少 API Key');
+export async function callModel({
+  model,
+  prompt,
+  userContent,
+  chapterContext,
+  recordType = 'generate',
+}: CallModelInput) {
+  if (!model.baseUrl.trim()) throw new Error('Model is missing Base URL');
+  if (!model.apiKey.trim()) throw new Error('Model is missing API Key');
 
-  const response = await fetch(normalizeBaseUrl(model.baseUrl), {
+  const endpoint = normalizeBaseUrl(model.baseUrl);
+  const startedAt = performance.now();
+
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -28,12 +39,12 @@ export async function callModel({ model, prompt, userContent, chapterContext }: 
       messages: [
         {
           role: 'system',
-          content: prompt || '你是一个中文小说创作助手，回答要具体、可执行、避免空泛。',
+          content: prompt || 'You are a writing assistant. Answer clearly and concretely.',
         },
         {
           role: 'user',
           content: chapterContext
-            ? `【当前章节正文】\n${chapterContext}\n\n【用户请求】\n${userContent}`
+            ? `Current chapter:\n${chapterContext}\n\nRequest:\n${userContent}`
             : userContent,
         },
       ],
@@ -44,11 +55,34 @@ export async function callModel({ model, prompt, userContent, chapterContext }: 
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`模型请求失败 (${response.status})：${errorText.slice(0, 240)}`);
+    addRecord({
+      modelId: model.id,
+      modelName: model.name,
+      type: recordType,
+      status: 'failed',
+      latencyMs: Math.round(performance.now() - startedAt),
+      endpoint,
+      error: errorText.slice(0, 240),
+    });
+    throw new Error(`Model request failed (${response.status}): ${errorText.slice(0, 240)}`);
   }
 
   const data = await response.json();
   const content = data?.choices?.[0]?.message?.content;
-  if (!content) throw new Error('模型没有返回内容');
+  if (!content) throw new Error('Model returned empty content');
+
+  const usage = data?.usage ?? {};
+  addRecord({
+    modelId: model.id,
+    modelName: model.name,
+    type: recordType,
+    status: 'success',
+    latencyMs: Math.round(performance.now() - startedAt),
+    endpoint,
+    inputTokens: usage.prompt_tokens,
+    outputTokens: usage.completion_tokens,
+    totalTokens: usage.total_tokens,
+  });
+
   return String(content);
 }

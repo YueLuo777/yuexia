@@ -11,7 +11,7 @@ const SORT_KEY = 'xinyuexia_workbench_sort_asc';
 function readJson<T>(key: string, fallback: T): T {
   try {
     const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) as T : fallback;
+    return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
   }
@@ -25,8 +25,16 @@ function uid() {
   return Date.now() + Math.floor(Math.random() * 1000);
 }
 
-function getContentKey(novelId: number, chapterId: number) {
+export function getChapterContentKey(novelId: number, chapterId: number) {
   return `xinyuexia_novel_${novelId}_chapter_${chapterId}`;
+}
+
+export function readChapterContent(novelId: number, chapterId: number) {
+  return localStorage.getItem(getChapterContentKey(novelId, chapterId)) ?? '';
+}
+
+function writeChapterContent(novelId: number, chapterId: number, content: string) {
+  localStorage.setItem(getChapterContentKey(novelId, chapterId), content);
 }
 
 function formatDate(date = new Date()) {
@@ -39,9 +47,9 @@ function addDays(date: Date, days: number) {
   return next;
 }
 
-function toChineseNumber(value: number) {
-  const digits = ['', '一', '二', '三', '四', '五', '六', '七', '八', '九', '十'];
-  if (value <= 10) return digits[value];
+export function toChineseNumber(value: number) {
+  const digits = ['零', '一', '二', '三', '四', '五', '六', '七', '八', '九'];
+  if (value <= 10) return value === 10 ? '十' : digits[value];
   if (value < 20) return `十${digits[value - 10]}`;
   const tens = Math.floor(value / 10);
   const ones = value % 10;
@@ -52,11 +60,22 @@ function normalizeVolumeNames(volumesMap: Record<number, Volume[]>) {
   let changed = false;
   const next = Object.fromEntries(Object.entries(volumesMap).map(([novelId, volumes]) => [
     novelId,
-    volumes.map((volume) => {
-      const match = volume.name.match(/^第(\d+)卷$/);
-      if (!match) return volume;
-      changed = true;
-      return { ...volume, name: `第${toChineseNumber(Number(match[1]))}卷` };
+    volumes.map((volume, index) => {
+      if (volume.name === '集纲') return volume;
+      if (/^第.+卷$/.test(volume.name)) return volume;
+      if (/^第?\d+卷$/.test(volume.name)) {
+        const number = Number(volume.name.replace(/\D/g, ''));
+        changed = true;
+        return { ...volume, name: `第${toChineseNumber(number)}卷` };
+      }
+      if (/^[\u4e00-\u9fff?]+$/.test(volume.name) && volume.name.includes('卷')) {
+        return volume;
+      }
+      if (index === 0 && volume.chapters.some((chapter) => chapter.title.startsWith('集纲'))) {
+        changed = true;
+        return { ...volume, name: '集纲' };
+      }
+      return volume;
     }),
   ])) as Record<number, Volume[]>;
 
@@ -141,7 +160,7 @@ function ensureOneSelected(volumes: Volume[]): Volume[] {
 
 export function useWorkbenchData() {
   const [novels, setNovels] = useState<WorkbenchNovel[]>(() => readJson<WorkbenchNovel[]>(NOVELS_KEY, []));
-  const [currentNovelId, setCurrentNovelId] = useState<number | null>(() => {
+  const [currentNovelId, setCurrentNovelIdState] = useState<number | null>(() => {
     const raw = localStorage.getItem(CURRENT_ID_KEY);
     return raw ? Number(raw) : null;
   });
@@ -168,10 +187,19 @@ export function useWorkbenchData() {
 
   const selectedChapter = useMemo(() => getSelectedChapter(volumes), [volumes]);
 
+  const setCurrentNovel = useCallback((novelId: number | null) => {
+    setCurrentNovelIdState(novelId);
+    if (novelId === null) {
+      localStorage.removeItem(CURRENT_ID_KEY);
+      return;
+    }
+    localStorage.setItem(CURRENT_ID_KEY, String(novelId));
+  }, []);
+
   useEffect(() => {
     setNovels(readJson<WorkbenchNovel[]>(NOVELS_KEY, []));
     const raw = localStorage.getItem(CURRENT_ID_KEY);
-    setCurrentNovelId(raw ? Number(raw) : null);
+    setCurrentNovelIdState(raw ? Number(raw) : null);
   }, []);
 
   useEffect(() => {
@@ -189,7 +217,7 @@ export function useWorkbenchData() {
       setEditorContent('');
       return;
     }
-    setEditorContent(localStorage.getItem(getContentKey(currentNovelId, selectedChapter.chapter.id)) ?? '');
+    setEditorContent(readChapterContent(currentNovelId, selectedChapter.chapter.id));
   }, [currentNovelId, selectedChapter?.chapter.id]);
 
   const persistVolumes = useCallback((updater: (prev: Volume[]) => Volume[]) => {
@@ -249,28 +277,51 @@ export function useWorkbenchData() {
   }, []);
 
   const addVolume = useCallback(() => {
-    persistVolumes((prev) => [
-      ...prev,
-      {
-        id: uid(),
-        name: `第${toChineseNumber(prev.length + 1)}卷`,
-        isExpanded: true,
-        chapters: [],
-      },
-    ]);
+    persistVolumes((prev) => {
+      const nonOutlineCount = prev.filter((volume) => volume.name !== '集纲').length;
+      return [
+        ...prev,
+        {
+          id: uid(),
+          name: `第${toChineseNumber(nonOutlineCount + 1)}卷`,
+          isExpanded: true,
+          chapters: [],
+        },
+      ];
+    });
   }, [persistVolumes]);
 
   const addChapter = useCallback((volumeId: number) => {
     persistVolumes((prev) => {
-      const maxSerial = Math.max(0, ...prev.flatMap((volume) => volume.chapters.map((chapter) => chapter.serialNumber)));
+      const targetVolume = prev.find((volume) => volume.id === volumeId);
+      if (!targetVolume) return prev;
+
+      const isOutline = targetVolume.name === '集纲';
+      let serialNumber = 1;
+      let title = '';
+
+      if (isOutline) {
+        const usedNumbers = new Set(targetVolume.chapters.map((chapter) => chapter.serialNumber));
+        while (usedNumbers.has(serialNumber)) serialNumber += 1;
+        title = `集纲${serialNumber}`;
+      } else {
+        const usedNumbers = new Set(
+          prev
+            .filter((volume) => volume.name !== '集纲')
+            .flatMap((volume) => volume.chapters.map((chapter) => chapter.serialNumber)),
+        );
+        while (usedNumbers.has(serialNumber)) serialNumber += 1;
+      }
+
       const newChapter: Chapter = {
         id: uid(),
-        title: '',
-        serialNumber: maxSerial + 1,
+        title,
+        serialNumber,
         wordCount: 0,
         isSelected: true,
         isPublished: false,
       };
+
       return prev.map((volume) => ({
         ...volume,
         chapters: volume.id === volumeId
@@ -302,7 +353,7 @@ export function useWorkbenchData() {
         volumeName: volume.name,
         deletedAt: formatDate(now),
         expireAt: formatDate(addDays(now, 30)),
-        content: localStorage.getItem(getContentKey(currentNovelId, chapterId)) ?? '',
+        content: readChapterContent(currentNovelId, chapterId),
       };
 
       return prev.map((item) => item.id === volumeId
@@ -312,7 +363,7 @@ export function useWorkbenchData() {
 
     if (deleted) {
       persistRecycled((prev) => [deleted as RecycledChapter, ...prev]);
-      localStorage.removeItem(getContentKey(currentNovelId, chapterId));
+      localStorage.removeItem(getChapterContentKey(currentNovelId, chapterId));
     }
   }, [currentNovelId, persistRecycled, persistVolumes]);
 
@@ -336,7 +387,7 @@ export function useWorkbenchData() {
         isSelected: true,
         isPublished: target.isPublished,
       };
-      localStorage.setItem(getContentKey(currentNovelId, target.id), target.content);
+      writeChapterContent(currentNovelId, target.id, target.content);
 
       return prev.map((volume) => ({
         ...volume,
@@ -355,7 +406,7 @@ export function useWorkbenchData() {
   const saveContent = useCallback((content: string) => {
     setEditorContent(content);
     if (!currentNovelId || !selectedChapter) return;
-    localStorage.setItem(getContentKey(currentNovelId, selectedChapter.chapter.id), content);
+    writeChapterContent(currentNovelId, selectedChapter.chapter.id, content);
     const wordCount = countWords(content);
     const nextVolumes = volumes.map((volume) => ({
       ...volume,
@@ -371,14 +422,17 @@ export function useWorkbenchData() {
   }, [currentNovelId, selectedChapter, updateNovelWordCount, volumes, volumesMap]);
 
   return {
+    novels,
     currentNovel,
     currentNovelId,
+    volumesMap,
     volumes,
     recycledChapters,
     selectedChapter,
     editorContent,
     sortAsc,
     lastSavedAt,
+    setCurrentNovel,
     selectChapter,
     toggleVolume,
     toggleSort,

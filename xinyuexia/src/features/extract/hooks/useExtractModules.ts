@@ -78,6 +78,20 @@ function writeModules(modules: ExtractModule[]) {
   localStorage.setItem(MODULES_KEY, JSON.stringify(modules));
 }
 
+function normalizeModules(value: unknown): ExtractModule[] | null {
+  if (!Array.isArray(value)) return null;
+  const items = value.filter((item) => (
+    item &&
+    typeof item === 'object' &&
+    typeof (item as ExtractModule).id === 'string' &&
+    typeof (item as ExtractModule).label === 'string' &&
+    typeof (item as ExtractModule).instruction === 'string' &&
+    ((item as ExtractModule).zone === 'system' || (item as ExtractModule).zone === 'output') &&
+    typeof (item as ExtractModule).active === 'boolean'
+  )) as ExtractModule[];
+  return items.length > 0 ? items : null;
+}
+
 export function useExtractModules() {
   const [modules, setModules] = useState<ExtractModule[]>(readModules);
 
@@ -132,6 +146,34 @@ export function useExtractModules() {
     });
   }, [persist]);
 
+  const exportExtractConfig = useCallback(() => JSON.stringify({
+    modules,
+    exportedAt: new Date().toISOString(),
+  }, null, 2), [modules]);
+
+  const importExtractConfig = useCallback((jsonText: string) => {
+    try {
+      const parsed: unknown = JSON.parse(jsonText);
+      const imported = normalizeModules((parsed as { modules?: unknown }).modules ?? parsed);
+      if (!imported) {
+        return { success: false, message: '配置格式不正确' };
+      }
+      setModules(imported);
+      writeModules(imported);
+      window.dispatchEvent(new CustomEvent('xinyuexia_extract_modules_updated'));
+      return { success: true, message: '模块配置已导入' };
+    } catch {
+      return { success: false, message: '无法解析配置文件' };
+    }
+  }, []);
+
+  const resetExtractModules = useCallback(() => {
+    setModules(DEFAULT_MODULES);
+    writeModules(DEFAULT_MODULES);
+    window.dispatchEvent(new CustomEvent('xinyuexia_extract_modules_updated'));
+    return DEFAULT_MODULES;
+  }, []);
+
   return {
     modules,
     systemModules,
@@ -140,5 +182,8 @@ export function useExtractModules() {
     toggleActive,
     updateModule,
     moveModule,
+    exportExtractConfig,
+    importExtractConfig,
+    resetExtractModules,
   };
 }

@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 import type { NewNovelInput, WorkType } from '@/features/novels/model/novelTypes';
 

@@ -38,9 +38,10 @@ export function ExtractDropZone({
 }: ExtractDropZoneProps) {
   const isSystem = id === 'system';
   const isOver = dragOverZone === id;
+  const zoneBg = isSystem ? 'bg-amber-50/80' : 'bg-sky-50/80';
 
   return (
-    <section className={`flex min-h-0 flex-1 flex-col border-b border-gray-100 ${isOver ? (isSystem ? 'bg-amber-50/80' : 'bg-sky-50/80') : 'bg-white'}`}>
+    <section className={`flex min-h-0 flex-1 flex-col border-b border-gray-100 ${isOver ? zoneBg : 'bg-white'}`}>
       <div className={`flex items-center justify-between border-b px-3 py-2 ${isOver ? (isSystem ? 'border-amber-200' : 'border-sky-200') : 'border-gray-100'}`}>
         <h3 className={`text-xs font-bold ${isSystem ? 'text-amber-700' : 'text-sky-700'}`}>{title}</h3>
         <span className="text-[10px] text-gray-400">{modules.length}</span>
@@ -63,6 +64,11 @@ export function ExtractDropZone({
             : 'border-transparent'
         }`}
       >
+        {isOver && (
+          <div className={`mx-2 mt-2 rounded-lg border border-dashed px-3 py-2 text-[11px] ${isSystem ? 'border-amber-300 bg-amber-50 text-amber-700' : 'border-sky-300 bg-sky-50 text-sky-700'}`}>
+            松开鼠标将模块放入这里
+          </div>
+        )}
         {modules.map((module) => (
           <SortableExtractModule
             key={module.id}

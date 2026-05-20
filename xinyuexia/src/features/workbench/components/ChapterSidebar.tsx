@@ -50,7 +50,7 @@ export function ChapterSidebar({
 
       <div className="flex-1 overflow-y-auto px-2 py-2">
         {volumes.map((volume) => {
-          const chapters = [...volume.chapters].sort((a, b) => sortAsc ? a.serialNumber - b.serialNumber : b.serialNumber - a.serialNumber);
+          const chapters = [...volume.chapters].sort((a, b) => (sortAsc ? a.serialNumber - b.serialNumber : b.serialNumber - a.serialNumber));
 
           return (
             <div key={volume.id} className="mb-1">

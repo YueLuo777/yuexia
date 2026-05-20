@@ -26,6 +26,7 @@ export function WorkbenchPage() {
   const [isDraggingPanel, setIsDraggingPanel] = useState(false);
   const dragStartX = useRef(0);
   const dragStartWidth = useRef(290);
+
   const {
     currentNovel,
     volumes,
@@ -62,6 +63,7 @@ export function WorkbenchPage() {
       const deltaX = dragStartX.current - event.clientX;
       setAiPanelWidth(Math.max(220, Math.min(600, dragStartWidth.current + deltaX)));
     };
+
     const handleUp = () => {
       setIsDraggingPanel(false);
       document.body.style.cursor = '';
@@ -103,6 +105,9 @@ export function WorkbenchPage() {
   const selectedWordCount = selectedChapter?.chapter.wordCount ?? 0;
   const chapterCount = volumes.reduce((sum, volume) => sum + volume.chapters.length, 0);
   const aiResultTitle = selectedChapterTitle ?? currentNovel.title;
+  const selectedVolumeName = selectedChapter
+    ? volumes.find((volume) => volume.id === selectedChapter.volumeId)?.name ?? '未选择卷'
+    : '未选择卷';
 
   const handleApplyAIResult = (action: AIResultAction, content: string) => {
     if (action === 'replace') {
@@ -151,6 +156,7 @@ export function WorkbenchPage() {
         onOpenOutline={() => setActiveModal('outline')}
         onOpenNotes={() => setActiveModal('notes')}
       />
+
       <div className="flex flex-1 overflow-hidden">
         <ChapterSidebar
           volumes={volumes}
@@ -164,6 +170,7 @@ export function WorkbenchPage() {
           onDeleteChapter={deleteChapter}
           onOpenRecycle={() => setIsRecycleOpen(true)}
         />
+
         <ChapterEditor
           chapter={selectedChapter?.chapter ?? null}
           content={editorContent}
@@ -171,6 +178,7 @@ export function WorkbenchPage() {
           onRenameChapter={renameChapter}
           onChangeContent={saveContent}
         />
+
         <div
           className="group z-10 flex w-[4px] shrink-0 cursor-ew-resize items-center justify-center bg-transparent transition-colors hover:bg-brand/30"
           onMouseDown={handlePanelDragStart}
@@ -178,6 +186,7 @@ export function WorkbenchPage() {
         >
           <div className="h-8 w-[2px] rounded-full bg-gray-300 opacity-0 transition-opacity group-hover:opacity-100" />
         </div>
+
         <aside className="shrink-0 border-l border-gray-200 bg-white" style={{ width: aiPanelWidth }}>
           <WorkbenchAIPanel
             selectedChapterTitle={selectedChapterTitle}
@@ -210,6 +219,18 @@ export function WorkbenchPage() {
                   <p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.title}</p>
                 </div>
                 <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-400">类型</p>
+                  <p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.type === 'script' ? '剧本' : '小说'}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-400">分类</p>
+                  <p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.category ?? '未分类'}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-400">卷数</p>
+                  <p className="mt-1 text-sm font-bold text-gray-900">{volumes.length}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
                   <p className="text-xs text-gray-400">章节数</p>
                   <p className="mt-1 text-sm font-bold text-gray-900">{chapterCount}</p>
                 </div>
@@ -219,13 +240,30 @@ export function WorkbenchPage() {
                 </div>
               </div>
             </section>
+
+            <section className="rounded-lg border border-gray-200 p-4">
+              <h3 className="mb-3 text-base font-bold text-gray-900">时间与位置</h3>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-400">创建时间</p>
+                  <p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.createdAt ?? '-'}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-400">最近修改</p>
+                  <p className="mt-1 text-sm font-bold text-gray-900">{currentNovel.lastModifiedAt ?? '-'}</p>
+                </div>
+                <div className="rounded-lg bg-gray-50 p-3">
+                  <p className="text-xs text-gray-400">当前卷 / 章</p>
+                  <p className="mt-1 text-sm font-bold text-gray-900">{selectedVolumeName} / {selectedChapterTitle ?? '未选择章节'}</p>
+                </div>
+              </div>
+            </section>
+
             <section className="rounded-lg border border-gray-200 p-4">
               <h3 className="mb-2 text-base font-bold text-gray-900">作品简介</h3>
-              <textarea
-                value="新项目暂未接入作品简介字段；这里保留旧版作品信息弹窗位置。"
-                readOnly
-                className="h-36 w-full resize-none rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm leading-6 text-gray-500"
-              />
+              <p className="whitespace-pre-wrap rounded-md bg-gray-50 px-3 py-2 text-sm leading-6 text-gray-700">
+                {currentNovel.synopsis?.trim() || '暂无简介'}
+              </p>
             </section>
           </div>
         </div>
@@ -236,7 +274,7 @@ export function WorkbenchPage() {
           <div className="rounded-lg border border-brand/20 bg-brand-light/50 p-4">
             <h3 className="text-sm font-bold text-gray-900">当前章节提炼入口</h3>
             <p className="mt-2 text-sm leading-6 text-gray-500">
-              旧版这里是工作台内嵌提炼弹窗。新项目目前已完成独立“提炼剧情”页面，可从左侧导航进入完整批量提炼流程；此弹窗先保留工作台入口位置。
+              这里仅显示入口提示，完整提炼流程已迁移到独立的“提炼剧情”页面。
             </p>
           </div>
           <div className="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-4 text-sm text-gray-500">

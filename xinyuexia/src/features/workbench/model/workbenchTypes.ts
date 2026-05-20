@@ -26,6 +26,9 @@ export interface WorkbenchNovel {
   id: number;
   title: string;
   type: 'novel' | 'script';
+  category?: string;
+  synopsis?: string;
   wordCount?: number;
+  createdAt?: string;
   lastModifiedAt?: string;
 }

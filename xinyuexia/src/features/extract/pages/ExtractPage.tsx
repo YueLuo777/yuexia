@@ -1,5 +1,5 @@
-import { Download, Library, Play, Settings, Sparkles } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { Download, Play, RotateCcw, Settings, Sparkles, Upload } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { ChapterSelectPanel } from '@/features/extract/components/ChapterSelectPanel';
@@ -15,24 +15,14 @@ import { addWorkbenchLibraryEntry } from '@/features/workbench/model/workbenchLi
 
 type ResultAction = 'plot' | 'setting' | 'outline';
 
+function readEnabledModels() {
+  return readModelSnapshot().filter((model) => model.enabled);
+}
+
 function createExcerpt(content: string) {
   const normalized = content.replace(/\s+/g, ' ').trim();
   if (!normalized) return '暂无正文，建议先在工作台补充章节内容。';
   return normalized.length > 180 ? `${normalized.slice(0, 180)}...` : normalized;
-}
-
-function downloadText(filename: string, text: string) {
-  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function readEnabledModels() {
-  return readModelSnapshot().filter((model) => model.enabled);
 }
 
 function buildSystemPrompt(modules: { label: string; instruction: string }[]) {
@@ -43,7 +33,10 @@ function buildSystemPrompt(modules: { label: string; instruction: string }[]) {
 }
 
 function buildExtractRequest(chapter: ExtractChapter, modules: { label: string; instruction: string }[]) {
-  const moduleText = modules.map((module) => `【${module.label}】\n${module.instruction.trim()}`).join('\n\n');
+  const moduleText = modules
+    .map((module) => `【${module.label}】\n${module.instruction.trim()}`)
+    .join('\n\n');
+
   return [
     '请提炼以下章节的剧情信息。',
     `章节：第${chapter.serialNumber}章 ${chapter.title || '未命名章节'}`,
@@ -58,12 +51,22 @@ function buildExtractRequest(chapter: ExtractChapter, modules: { label: string; 
 
 function buildLocalPreview(chapter: ExtractChapter, modules: { label: string; instruction: string }[]) {
   return modules
-    .map((module) => `【${module.label}】\n${module.instruction}\n章节摘录：${createExcerpt(chapter.content)}`)
+    .map((module) => `【${module.label}】\n${module.instruction}\n章节摘要：${createExcerpt(chapter.content)}`)
     .join('\n\n');
 }
 
 function buildResultTitle(chapter: ExtractChapter) {
   return `第${chapter.serialNumber}章 ${chapter.title || '未命名章节'}`;
+}
+
+function downloadText(filename: string, text: string) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 export function ExtractPage() {
@@ -77,6 +80,9 @@ export function ExtractPage() {
     toggleActive,
     updateModule,
     moveModule,
+    exportExtractConfig,
+    importExtractConfig,
+    resetExtractModules,
   } = useExtractModules();
 
   const [models, setModels] = useState<ModelItem[]>(readEnabledModels);
@@ -91,6 +97,7 @@ export function ExtractPage() {
   const [saveMessage, setSaveMessage] = useState('');
   const [isExtracting, setIsExtracting] = useState(false);
   const [extractProgress, setExtractProgress] = useState('');
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (selectedNovelId === null && novels.length > 0) {
@@ -109,6 +116,12 @@ export function ExtractPage() {
       setSelectedModelId(models[0].id);
     }
   }, [models, selectedModelId]);
+
+  useEffect(() => {
+    if (!selectedModuleId && modules[0]) {
+      setSelectedModuleId(modules[0].id);
+    }
+  }, [modules, selectedModuleId]);
 
   const selectedNovel = novels.find((novel) => novel.id === selectedNovelId) ?? novels[0] ?? null;
   const selectedModule = modules.find((module) => module.id === selectedModuleId) ?? modules[0] ?? null;
@@ -134,11 +147,8 @@ export function ExtractPage() {
   const handleToggleChapter = (id: number) => {
     setSelectedChapterIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   };
@@ -164,6 +174,24 @@ export function ExtractPage() {
       moveModule(activeDragId, overId);
     }
     resetDragState();
+  };
+
+  const handleExportModules = () => {
+    const blob = new Blob([exportExtractConfig()], { type: 'application/json;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'xinyuexia-extract-modules.json';
+    link.click();
+    URL.revokeObjectURL(url);
+    setSaveMessage('模块配置已导出');
+  };
+
+  const handleImportModules = async (file?: File | null) => {
+    if (!file) return;
+    const text = await file.text();
+    const result = importExtractConfig(text);
+    setSaveMessage(result.message);
   };
 
   const handleExtract = async () => {
@@ -193,7 +221,7 @@ export function ExtractPage() {
             userContent: buildExtractRequest(chapter, activeOutputModules),
           });
         } catch (error) {
-          content = error instanceof Error ? `【错误】${error.message}` : '【错误】模型请求失败';
+          content = error instanceof Error ? `【错误】${error.message}` : '【错误】模型请求失败。';
         }
       }
 
@@ -205,11 +233,11 @@ export function ExtractPage() {
       setResults([...nextResults]);
     }
 
-    setExtractProgress(selectedModel ? `提炼完成：${nextResults.length} 章` : `本地预览完成：${nextResults.length} 章`);
+    setExtractProgress(selectedModel ? `提炼完成，共 ${nextResults.length} 章` : `本地预览完成，共 ${nextResults.length} 章`);
     setIsExtracting(false);
   };
 
-  const handleExport = () => {
+  const handleExportResults = () => {
     const text = results.map((result) => `${result.chapterTitle}\n\n${result.content}`).join('\n\n---\n\n');
     downloadText(`提炼剧情-${selectedNovel?.title ?? '未命名'}.txt`, text);
   };
@@ -255,7 +283,7 @@ export function ExtractPage() {
             <Sparkles className="h-5 w-5 text-brand" />
             提炼剧情
           </h1>
-          <p className="mt-0.5 text-xs text-gray-400">长按模块可拖拽排序，系统指令和输出模块支持跨区移动。</p>
+          <p className="mt-0.5 text-xs text-gray-400">长按模块左侧把手可拖拽排序，系统指令和输出模块支持跨区移动。</p>
         </div>
         <div className="flex items-center gap-2">
           <select
@@ -264,7 +292,7 @@ export function ExtractPage() {
             className="h-9 min-w-[150px] rounded-lg border border-gray-200 bg-white px-3 text-xs text-gray-600 outline-none focus:border-brand"
           >
             {models.length === 0 ? (
-              <option value="">无启用模型</option>
+              <option value="">无可用模型</option>
             ) : models.map((model) => (
               <option key={model.id} value={model.id}>{model.name}</option>
             ))}
@@ -285,15 +313,63 @@ export function ExtractPage() {
             {isExtracting ? '提炼中' : '开始提炼'}
           </button>
           <button
-            onClick={handleExport}
+            onClick={handleExportResults}
             disabled={results.length === 0}
             className="flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:text-gray-300"
           >
             <Download className="h-4 w-4" />
-            导出
+            导出结果
           </button>
+          <button
+            onClick={handleExportModules}
+            className="flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+          >
+            <Download className="h-4 w-4" />
+            导出模块
+          </button>
+          <button
+            onClick={() => importInputRef.current?.click()}
+            className="flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+          >
+            <Upload className="h-4 w-4" />
+            导入模块
+          </button>
+          <button
+            onClick={() => {
+              resetExtractModules();
+              setSaveMessage('模块已重置');
+            }}
+            className="flex h-9 items-center gap-1.5 rounded-lg border border-red-200 bg-white px-4 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
+          >
+            <RotateCcw className="h-4 w-4" />
+            重置模块
+          </button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0] ?? null;
+              void handleImportModules(file);
+              event.target.value = '';
+            }}
+          />
         </div>
       </header>
+
+      <div className="border-b border-gray-200 bg-white px-6 py-3">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-gray-500">
+          <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">作品: {selectedNovel?.title ?? '未选择'}</span>
+          <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">已选章节: {selectedChapters.length}</span>
+          <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">系统模块: {activeSystemModules.length}</span>
+          <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">输出模块: {activeOutputModules.length}</span>
+          <span className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1">结果数: {results.length}</span>
+          <span className="rounded-full border border-brand/20 bg-brand-light px-3 py-1 text-brand">
+            {saveMessage || extractProgress || '准备就绪'}
+          </span>
+        </div>
+      </div>
 
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-y-auto p-4 xl:grid-cols-[260px_minmax(420px,1fr)_320px] xl:overflow-hidden">
         <aside className="flex min-h-[420px] flex-col overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm xl:min-h-0">
@@ -366,7 +442,6 @@ export function ExtractPage() {
             <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
               <h2 className="text-sm font-bold text-gray-900">提炼结果</h2>
               <div className="flex items-center gap-2 text-xs text-gray-400">
-                <span>{saveMessage || extractProgress || `${results.length} 条`}</span>
                 <button
                   onClick={handleSaveToPlotLibrary}
                   disabled={results.length === 0}
@@ -388,12 +463,23 @@ export function ExtractPage() {
                 >
                   入概要库
                 </button>
+                <button
+                  onClick={() => {
+                    setResults([]);
+                    setSaveMessage('');
+                    setExtractProgress('');
+                  }}
+                  disabled={results.length === 0}
+                  className="rounded-md border border-red-200 px-2 py-1 text-[11px] text-red-600 hover:bg-red-50 disabled:text-red-300"
+                >
+                  清空
+                </button>
               </div>
             </div>
-            <div className="max-h-[280px] overflow-y-auto p-4">
+            <div className="max-h-[320px] overflow-y-auto p-4">
               {results.length === 0 ? (
                 <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-gray-200 px-4 text-center text-sm text-gray-400">
-                  选择章节后点击“开始提炼”。未配置模型时生成本地预览；配置模型后会逐章调用模型。
+                  选择章节后点击“开始提炼”。未配置模型时会生成本地预览；配置模型后会逐章调用模型。
                 </div>
               ) : (
                 <div className="space-y-3">
@@ -412,7 +498,7 @@ export function ExtractPage() {
                             }])}
                             className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-white"
                           >
-                            进剧情库
+                            剧情库
                           </button>
                           <button
                             onClick={() => addWorkbenchLibraryEntry(
@@ -423,7 +509,7 @@ export function ExtractPage() {
                             )}
                             className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-white"
                           >
-                            进设定
+                            设定库
                           </button>
                           <button
                             onClick={() => addWorkbenchLibraryEntry(
@@ -434,7 +520,7 @@ export function ExtractPage() {
                             )}
                             className="rounded-md border border-gray-200 px-2 py-1 text-[11px] text-gray-600 hover:bg-white"
                           >
-                            进概要
+                            概要库
                           </button>
                         </div>
                       </div>
@@ -450,7 +536,7 @@ export function ExtractPage() {
         <aside className="flex min-h-0 flex-col rounded-xl border border-gray-100 bg-white shadow-sm">
           <div className="border-b border-gray-100 px-4 py-3">
             <h2 className="text-sm font-bold text-gray-900">模块编辑</h2>
-            <p className="mt-1 text-xs text-gray-400">点击卡片编辑，拖拽只绑定在左侧把手上。</p>
+            <p className="mt-1 text-xs text-gray-400">点击模块卡片编辑内容，长按左侧把手后拖拽调整顺序。</p>
           </div>
           {selectedModule ? (
             <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
@@ -472,7 +558,7 @@ export function ExtractPage() {
                 />
               </label>
               <div className="rounded-lg bg-gray-50 p-3 text-xs leading-5 text-gray-500">
-                当前区域：{selectedModule.zone === 'system' ? '系统指令' : '输出模块'}。锁定模块不能关闭和改名，但可以跨区拖动调整顺序。
+                当前区域：{selectedModule.zone === 'system' ? '系统指令' : '输出模块'}。锁定模块不能改名，但仍可跨区拖拽调整顺序。
               </div>
             </div>
           ) : (

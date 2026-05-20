@@ -111,6 +111,13 @@ export function useNovelLibrary() {
     persistNovels(next);
   }, [novels, persistNovels]);
 
+  const updateCover = useCallback((id: number, cover?: string) => {
+    const next = novels.map((novel) => novel.id === id
+      ? { ...novel, cover, lastModifiedAt: formatDate() }
+      : novel);
+    persistNovels(next);
+  }, [novels, persistNovels]);
+
   const addCategory = useCallback((category: string) => {
     const trimmed = category.trim();
     if (!trimmed || categories.includes(trimmed)) return;
@@ -153,6 +160,19 @@ export function useNovelLibrary() {
     setCurrentNovelId(id);
   }, []);
 
+  const importNovels = useCallback((items: Novel[]) => {
+    const merged = [...novels];
+    for (const item of items) {
+      merged.push({
+        ...item,
+        id: nextNovelId([...merged, ...recycledNovels]),
+        createdAt: item.createdAt || formatDate(),
+        lastModifiedAt: item.lastModifiedAt || formatDate(),
+      });
+    }
+    persistNovels(merged);
+  }, [novels, persistNovels, recycledNovels]);
+
   const stats = useMemo(() => ({
     novelCount: getNovelsByType('novel').length,
     scriptCount: getNovelsByType('script').length,
@@ -169,10 +189,12 @@ export function useNovelLibrary() {
     createNovel,
     renameNovel,
     updateCategory,
+    updateCover,
     addCategory,
     moveToRecycle,
     restoreNovel,
     permanentDelete,
     selectNovel,
+    importNovels,
   };
 }

@@ -43,6 +43,12 @@ export function savePlotItems(items: NewPlotLibraryItem[]) {
   return nextItems;
 }
 
+export function readPlotLibrarySnapshot() {
+  return {
+    items: readItems(),
+  };
+}
+
 export function usePlotLibrary() {
   const [items, setItems] = useState<PlotLibraryItem[]>(readItems);
 

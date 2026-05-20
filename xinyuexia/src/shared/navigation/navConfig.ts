@@ -5,6 +5,7 @@ import {
   Database,
   Film,
   FlaskConical,
+  FolderOpen,
   LayoutGrid,
   Library,
   Lightbulb,
@@ -38,6 +39,7 @@ const iconMap: Record<string, LucideIcon> = {
   Database,
   Film,
   FlaskConical,
+  FolderOpen,
   LayoutGrid,
   Library,
   Lightbulb,
@@ -125,6 +127,16 @@ export function loadNavConfig(): NavGroupConfig[] {
   } catch {
     return cloneDefaultConfig();
   }
+}
+
+export function saveNavConfig(config: NavGroupConfig[]) {
+  localStorage.setItem(NAV_CONFIG_KEY, JSON.stringify(config));
+}
+
+export function resetNavConfig() {
+  const fresh = cloneDefaultConfig();
+  saveNavConfig(fresh);
+  return fresh;
 }
 
 export function loadCollapsedSections(): Record<string, boolean> {

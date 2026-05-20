@@ -27,5 +27,5 @@ launcher = root & "\launch-xinyuexia.mjs"
 nodeExe = ResolveNodeExe(root)
 
 shell.CurrentDirectory = root
-command = """" & nodeExe & """ """ & launcher & """ web"
+command = """" & nodeExe & """ """ & launcher & """ dist"
 shell.Run command, 0, False
